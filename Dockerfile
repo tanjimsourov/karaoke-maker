@@ -11,6 +11,10 @@ RUN python setup.py --check && python -m venv .venv-zoom && python -m venv .venv
     && .venv-demucs/bin/pip install --index-url https://download.pytorch.org/whl/cpu torch==2.8.0 torchaudio==2.8.0 \
     && .venv-zoom/bin/pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-zoom.txt \
     && .venv-demucs/bin/pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-demucs.txt
+# WhisperX sentence alignment needs these data packages, not just the nltk library.
+# Store them in the image (outside writable model/work volumes and cleanup paths).
+ENV NLTK_DATA=/opt/nltk_data
+RUN .venv-zoom/bin/python -c "import nltk; nltk.download('punkt', download_dir='/opt/nltk_data', raise_on_error=True); nltk.download('punkt_tab', download_dir='/opt/nltk_data', raise_on_error=True); nltk.data.find('tokenizers/punkt_tab/english/')"
 COPY karaoke.py ./
 COPY tools/ ./tools/
 COPY config/ ./config/
@@ -27,6 +31,7 @@ RUN useradd --create-home --uid 10001 karaoke \
     && mkdir -p /app/work /app/out /app/reports /app/models /app/tmp \
     && chown karaoke:karaoke /app/work /app/out /app/reports /app/models /app/tmp
 USER karaoke
+RUN .venv-zoom/bin/python -c "import nltk; assert len(nltk.sent_tokenize('First sentence. Second sentence.')) == 2; print('NLTK tokenizer OK')"
 RUN .venv-zoom/bin/python -c "import sys,subprocess; sys.path.insert(0,'tools'); from project_runtime import DEMUCSPY; assert str(DEMUCSPY)=='/app/.venv-demucs/bin/python'; subprocess.run([str(DEMUCSPY),'-c','import numpy,torch,demucs; print(\"Demucs environment OK\")'],check=True)"
 ENTRYPOINT ["/app/.venv-zoom/bin/python", "-u", "/app/tools/server_batch.py"]
 CMD []
