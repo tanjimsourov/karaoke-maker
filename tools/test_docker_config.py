@@ -40,4 +40,20 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(values['KARAOKE_CLEANUP_AFTER_RUN'],'1')
         self.assertTrue((ROOT/values['KARAOKE_LOGO']).is_file())
 
+    def test_shared_server_isolation(self):
+        service=yaml.safe_load((ROOT/'docker-compose.yml').read_text())['services']['karaoke']
+        self.assertTrue(service['read_only'])
+        self.assertEqual(service['cap_drop'],['ALL'])
+        self.assertIn('no-new-privileges:true',service['security_opt'])
+        self.assertNotIn('ports',service)
+        self.assertNotIn('privileged',service)
+        self.assertNotIn('network_mode',service)
+        self.assertNotIn('docker.sock',str(service))
+        self.assertEqual(service['pids_limit'],512)
+        values=dict(line.split('=',1) for line in (ROOT/'.env').read_text().splitlines()
+                    if '=' in line and not line.lstrip().startswith('#'))
+        self.assertEqual(values['KARAOKE_SERVER_WORKERS'],'2')
+        self.assertEqual(values['KARAOKE_DOCKER_CPUS'],'2')
+        self.assertEqual(values['KARAOKE_DOCKER_MEMORY'],'10g')
+
 if __name__=='__main__':unittest.main()

@@ -37,6 +37,13 @@ def python_in(environment):
     return Path(environment) / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
 
 
+def python_setting(name, default):
+    # Linux venv/bin/python is a symlink to the base interpreter. Resolving it
+    # bypasses pyvenv.cfg and loses the virtual environment's installed packages.
+    value = Path(os.path.expandvars(os.environ.get(name, str(default)))).expanduser()
+    return Path(os.path.abspath(value if value.is_absolute() else ROOT/value))
+
+
 def executable(name, bundled):
     configured = os.environ.get(name)
     if configured:
@@ -52,7 +59,7 @@ FFMPEG = executable('KARAOKE_FFMPEG', 'tools/ffmpeg/ffmpeg.exe')
 LOGO = path_setting('KARAOKE_LOGO', 'assets/logo.png')
 if not LOGO.exists() and not os.environ.get('KARAOKE_LOGO'):
     LOGO = ROOT / 'work/webmail/Logo-Karaoke-2025-WHITE.png'
-DEMUCSPY = path_setting('KARAOKE_DEMUCS_PYTHON', python_in(ROOT / '.venv-demucs'))
+DEMUCSPY = python_setting('KARAOKE_DEMUCS_PYTHON', python_in(ROOT / '.venv-demucs'))
 WORK = path_setting('KARAOKE_WORK_DIR', 'work/local_open_source')
 OUT = path_setting('KARAOKE_OUTPUT_DIR', 'out')
 MODELS = path_setting('KARAOKE_MODEL_DIR', 'models')

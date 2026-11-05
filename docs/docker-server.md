@@ -83,13 +83,14 @@ environments, model weights, temporary stems and video exports.
   song timing; a musical lead-in is not automatically cut to start singing at 10 s.
 * Maximum **150,000,000 bytes**, target budget 140 MB. Short/simple videos can be
   smaller than 100 MB. A limit cannot guarantee identical visual quality at every duration.
-* `KARAOKE_SERVER_WORKERS=6` keeps up to six songs active. Each completion immediately
+* `KARAOKE_SERVER_WORKERS=2` keeps up to two songs active by default (up to six is supported). Each completion immediately
   releases a slot for the next file. Each song has isolated work/render/tmp/export paths.
   Light `htdemucs` is configured without automatic heavy-model fallback. Failed checks
   still stop that song; remaining queued songs continue.
-* Independent background work may overlap with audio stages. Model initialization/downloads
-  and OCR retain their shared locks; inference can otherwise overlap. Default quota is
-  6 CPUs / 24 GB with one inference thread per song. The server must have enough RAM;
+* Independent background overlap is disabled by default on a shared server; enable it
+  explicitly with `KARAOKE_SERVER_PARALLEL=1` if capacity permits. Model initialization/downloads
+  and OCR retain their shared locks; inference can otherwise overlap. Shared-server default quota is
+  2 CPUs / 10 GB with one inference thread per song. The server must have enough RAM;
   six concurrent songs do not guarantee six-fold speedup or perfect lyric/audio quality.
 * While records exist, published-file hashes support skip/resume. After cleanup,
   existing version filenames are checked for streams/size/full decoding before skipping.
@@ -143,3 +144,32 @@ With the processing environment installed:
 The folder runner defaults to per-song cleanup. `--no-cleanup-song` preserves successful
 work when troubleshooting. Local source/output files are preserved. The local environment
 was missing at the latest update; rebuild dependencies with `setup.py` if necessary.
+
+## Shared-server resource protection
+
+The latest `.env` deliberately lowers the earlier six-worker setup to two workers,
+two CPU cores and 10 GB RAM. Root filesystem is read-only, capabilities are dropped,
+privilege escalation is disabled, process count is bounded and no ports, host network,
+Docker socket or other projects' volumes are exposed. The short init service retains
+only the permissions required to prepare the output and runtime directories.
+
+These limits reduce impact; they do not reserve performance for websites/FTP. Disk
+I/O, free disk space and model-download bandwidth are still shared. Compose runtime
+limits do not constrain image builds. Build during a quiet period when possible.
+The Docker daemon/VM must itself have adequate resources. No host/global Docker
+settings are changed. Do not use global prune or stop commands.
+
+After copying the updated Dockerfile, docker-compose.yml, .env and tools to the
+server project, stop only this worker and rebuild:
+
+```powershell
+cd "D:\karaoke-tool\karaoke-maker"
+docker compose stop karaoke
+docker compose config --quiet
+docker compose up --build
+```
+
+Do not change the Compose project name or delete volumes when applying this update;
+existing model downloads remain available. Monitor with `docker stats`. The full
+container runtime still requires server validation; local tests check configuration
+and queue behaviour, not actual service latency under server load.
