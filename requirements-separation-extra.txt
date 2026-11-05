@@ -1,0 +1,4 @@
+# Optional: BS-Roformer ensemble / lead-versus-backing separation.
+audio-separator>=0.30,<1
+torch==2.8.0
+torchaudio==2.8.0

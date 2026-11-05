@@ -1,0 +1,1 @@
+{"source":"../../inputs/Andreas Odbjerg - Foler Mig Selv 100 (1080p).mp4","title":"Føler mig selv 100","artist":"Andreas Odbjerg","language":"da","mode":"music","background":"original","alignment_model":"saattrupdan/wav2vec2-xls-r-300m-ftspeech","audio_quality":{"threads":2},"render":{"fps":30,"crf":14}}

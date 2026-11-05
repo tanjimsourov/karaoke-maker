@@ -1,0 +1,32 @@
+[
+  {
+    "slug":"AEr_lig_Freestyle", "title":"Ærlig Freestyle", "artist":"TogA",
+    "source":"Bowlnfun Jakob For Visuals/done/Ærlig Freestyle.mp3",
+    "language":"da", "language_label":"DANSK KARAOKE",
+    "background":"audio-bg-sample/14-10/jan-chatgpt/Dromerige neonbowling in Aalborg.png"
+  },
+  {
+    "slug":"Blodigt", "title":"Blodigt", "artist":"Anton Westerlin feat. Annika",
+    "source":"Bowlnfun Jakob For Visuals/done/Blodigt.mp3",
+    "language":"da", "language_label":"DANSK KARAOKE",
+    "background":"audio-bg-sample/14-10/jan-chatgpt/Neon bowlinglounge in dromerige bokeh.png"
+  },
+  {
+    "slug":"BUNT_TRIPPIN", "title":"TRIPPIN", "artist":"BUNT.",
+    "source":"Bowlnfun Jakob For Visuals/done/BUNT. - TRIPPIN.mp3",
+    "language":"en", "language_label":"KARAOKE",
+    "background":"audio-bg-sample/14-10/jan-chatgpt/Neon bowlinglounge in dromerige bokeh.png"
+  },
+  {
+    "slug":"Barry_Cant_Swim_Kimbara", "title":"Kimbara", "artist":"Barry Can't Swim",
+    "source":"Bowlnfun Jakob For Visuals/done/Barry Can't Swim - 'Kimbara' (Official Visualiser).mp3",
+    "language":"es", "language_label":"KARAOKE",
+    "background":"audio-bg-sample/14-10/jan-chatgpt/Dromerige neonbowling in Aalborg.png"
+  },
+  {
+    "slug":"Bliv_her_lidt_endnu", "title":"Bliv her lidt endnu", "artist":"Annika feat. JOSVA",
+    "source":"Bowlnfun Jakob For Visuals/done/Bliv her lidt endnu.mp3",
+    "language":"da", "language_label":"DANSK KARAOKE",
+    "background":"audio-bg-sample/14-10/jan-chatgpt/Dromerige neonbowling in Aalborg.png"
+  }
+]

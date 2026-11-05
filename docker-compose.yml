@@ -1,0 +1,72 @@
+services:
+  karaoke-init:
+    image: smc-karaoke:local
+    pull_policy: never
+    user: "0:0"
+    entrypoint: ["/app/.venv-zoom/bin/python", "/app/tools/container_init.py"]
+    environment:
+      KARAOKE_UID: "${KARAOKE_UID:-10001}"
+      KARAOKE_GID: "${KARAOKE_GID:-10001}"
+    logging:
+      driver: "none"
+    volumes:
+      - type: bind
+        source: ${KARAOKE_MEDIA_HOST_DIR:?Set KARAOKE_MEDIA_HOST_DIR in .env}
+        target: /media
+        bind:
+          create_host_path: false
+      - karaoke_models:/app/models
+      - karaoke_work:/app/work
+      - karaoke_exports:/app/out
+      - karaoke_reports:/app/reports
+      - karaoke_tmp:/app/tmp
+  karaoke:
+    build: .
+    image: smc-karaoke:local
+    init: true
+    depends_on:
+      karaoke-init:
+        condition: service_completed_successfully
+    user: "${KARAOKE_UID:-10001}:${KARAOKE_GID:-10001}"
+    cpus: "${KARAOKE_DOCKER_CPUS:-4}"
+    mem_limit: ${KARAOKE_DOCKER_MEMORY:-12g}
+    logging:
+      driver: "none"
+    environment:
+      KARAOKE_INPUT_DIR: /media
+      KARAOKE_SERVER_OUTPUT_DIR: /media/karaoke
+      KARAOKE_LANGUAGE: "${KARAOKE_LANGUAGE:-auto}"
+      KARAOKE_SERVER_MODEL: "${KARAOKE_SERVER_MODEL:-htdemucs}"
+      KARAOKE_SERVER_THREADS: "${KARAOKE_SERVER_THREADS:-2}"
+      KARAOKE_SERVER_WORKERS: "${KARAOKE_SERVER_WORKERS:-6}"
+      KARAOKE_SERVER_PARALLEL: "${KARAOKE_SERVER_PARALLEL:-1}"
+      KARAOKE_SETTLE_SECONDS: "${KARAOKE_SETTLE_SECONDS:-30}"
+      KARAOKE_CLEANUP_AFTER_RUN: "${KARAOKE_CLEANUP_AFTER_RUN:-1}"
+      KARAOKE_COUNTDOWN_STYLE: "${KARAOKE_COUNTDOWN_STYLE:-arc}"
+      KARAOKE_COUNTDOWN_COLOUR: "${KARAOKE_COUNTDOWN_COLOUR:-#BB3794}"
+      KARAOKE_ALLOW_MODEL_DOWNLOAD: "${KARAOKE_ALLOW_MODEL_DOWNLOAD:-1}"
+      KARAOKE_FFMPEG_THREADS: "${KARAOKE_SERVER_THREADS:-2}"
+      OMP_NUM_THREADS: "${KARAOKE_SERVER_THREADS:-2}"
+      MKL_NUM_THREADS: "${KARAOKE_SERVER_THREADS:-2}"
+      OPENBLAS_NUM_THREADS: "${KARAOKE_SERVER_THREADS:-2}"
+    volumes:
+      - type: bind
+        source: ${KARAOKE_MEDIA_HOST_DIR:?Set KARAOKE_MEDIA_HOST_DIR in .env}
+        target: /media
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${KARAOKE_MEDIA_HOST_DIR}/karaoke
+        target: /media/karaoke
+      - karaoke_models:/app/models
+      - karaoke_work:/app/work
+      - karaoke_exports:/app/out
+      - karaoke_reports:/app/reports
+      - karaoke_tmp:/app/tmp
+volumes:
+  karaoke_models:
+  karaoke_work:
+  karaoke_exports:
+  karaoke_reports:
+  karaoke_tmp:

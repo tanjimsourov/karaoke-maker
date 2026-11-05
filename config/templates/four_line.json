@@ -1,0 +1,15 @@
+{
+  "description": "Default Bowl'n Fun layout: four-line pages, orange word sweep.",
+  "lines_per_page": 4,
+  "font_name": "Arial",
+  "font_file": "C:/Windows/Fonts/arialbd.ttf",
+  "font_size": 66,
+  "text_colour": "#FFFFFF",
+  "highlight_colour": "#FFA500",
+  "outline_colour": "#101010",
+  "outline": 5,
+  "shadow": 1,
+  "line_spacing": 155,
+  "block_center_y": 517.5,
+  "max_text_width": 1640
+}

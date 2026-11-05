@@ -1,0 +1,15 @@
+{
+  "source": "../inputs/Hilary Duff - CATastrophe (1080p).mp4",
+  "title": "CATastrophe",
+  "artist": "Hilary Duff",
+  "language": "en",
+  "mode": "music",
+  "background": "original",
+  "transcription_chunk_length": 30,
+  "audio_quality": {"threads": 4},
+  "render": {
+    "canvas": "1920x1080", "fps": 30, "crf": 14, "preset": "fast",
+    "intro_seconds": 10, "intro_countdown": true,
+    "highlight_colour": "#FFA500", "sync_background": true
+  }
+}

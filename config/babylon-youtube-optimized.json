@@ -1,0 +1,9 @@
+{
+  "profile":"optimized",
+  "source":"../inputs/Taylor Swift - Babylon - YouTube (1080p).mp4",
+  "title":"Babylon", "artist":"Taylor Swift", "language":"en",
+  "mode":"music", "background":"original",
+  "alignment_model":"WAV2VEC2_ASR_LARGE_LV60K_960H",
+  "audio_quality":{"threads":3},
+  "render":{"fps":30,"crf":14,"highlight_colour":"#FF8C00"}
+}

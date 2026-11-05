@@ -1,0 +1,9 @@
+{
+  "jobs": [
+    {"id":"andreas-foler","url":"https://www.youtube.com/watch?v=khx7Tk4KyQk","source_name":"Andreas Odbjerg - Foler Mig Selv 100 (1080p).mp4","job":"config/batch-heavy-2026-10-31/andreas-foler.json"},
+    {"id":"jung-tilbage","url":"https://www.youtube.com/watch?v=hEshUkBVJEM","source_name":"Jung - Hun Kommer Tilbage (1080p).mp4","job":"config/batch-heavy-2026-10-31/jung-tilbage.json"},
+    {"id":"dua-dance","url":"https://www.youtube.com/watch?v=OiC1rgCPmUQ","source_name":"Dua Lipa - Dance The Night (1080p).mp4","job":"config/batch-heavy-2026-10-31/dua-dance.json"},
+    {"id":"harry-as-it-was","url":"https://www.youtube.com/watch?v=H5v3kku4y6Q","source_name":"Harry Styles - As It Was (1080p).mp4","job":"config/batch-heavy-2026-10-31/harry-as-it-was.json"},
+    {"id":"ed-bad-habits","url":"https://www.youtube.com/watch?v=orJSJGHjBLI","source_name":"Ed Sheeran - Bad Habits (1080p).mp4","job":"config/batch-heavy-2026-10-31/ed-bad-habits.json"}
+  ]
+}

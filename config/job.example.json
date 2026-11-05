@@ -1,0 +1,30 @@
+{
+  "source": "../inputs/song.mp4",
+  "title": "Song title",
+  "artist": "Artist name",
+  "language": "en",
+  "mode": "music",
+  "background": "original",
+  "transcription_model": "large-v3-turbo",
+  "audio_quality": {
+    "voice_threshold": 0.25,
+    "window_seconds": 10,
+    "step_seconds": 5,
+    "threads": 2,
+    "alternatives": ["uvr"],
+    "asr": true,
+    "asr_model": "base",
+    "max_asr_windows": 6,
+    "max_review_clips": 6
+  },
+  "render": {
+    "intro_seconds": 10,
+    "intro_countdown": true,
+    "canvas": "1920x1080",
+    "fps": 30,
+    "crf": 14,
+    "highlight_colour": "#FFA500",
+    "preset": "fast",
+    "sync_background": true
+  }
+}

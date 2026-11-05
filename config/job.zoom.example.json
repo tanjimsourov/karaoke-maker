@@ -1,0 +1,16 @@
+{
+  "source": "../inputs/zoom-song.mp4",
+  "title": "Song title",
+  "artist": "Artist name",
+  "mode": "zoom",
+  "language": "en",
+  "screen_profile": "white-blue",
+  "background": "../audio-bg-sample/14-10/jan-chatgpt/Dromerige neonbowling in Aalborg.png",
+  "render": {
+    "intro_seconds": 10,
+    "canvas": "1920x1080",
+    "fps": 30,
+    "crf": 14,
+    "preset": "fast"
+  }
+}

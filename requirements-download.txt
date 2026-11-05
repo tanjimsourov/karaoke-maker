@@ -1,0 +1,2 @@
+# Optional source-download helper; not required for local MP4 processing.
+yt-dlp[default]==2026.10.26

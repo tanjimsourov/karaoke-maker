@@ -1,0 +1,18 @@
+{
+  "source": "../inputs/Taylor Swift - Shake It Off (1080p).mp4",
+  "title": "Shake It Off",
+  "artist": "Taylor Swift",
+  "language": "en",
+  "mode": "music",
+  "background": "original",
+  "audio_quality": {
+    "threads": 4
+  },
+  "render": {
+    "canvas": "1920x1080",
+    "fps": 30,
+    "crf": 14,
+    "preset": "fast",
+    "intro_seconds": 10
+  }
+}

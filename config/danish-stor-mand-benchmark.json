@@ -1,0 +1,20 @@
+{
+  "source": "../inputs/Tobias Rahim and Andreas Odbjerg - STOR MAND (1080p).mp4",
+  "title": "STOR MAND",
+  "artist": "Tobias Rahim & Andreas Odbjerg",
+  "language": "da",
+  "mode": "music",
+  "background": "original",
+  "transcription_model": "large-v3-turbo",
+  "alignment_model": "saattrupdan/wav2vec2-xls-r-300m-ftspeech",
+  "audio_quality": {
+    "voice_threshold": 0.25, "window_seconds": 10, "step_seconds": 5,
+    "threads": 3, "alternatives": ["uvr"], "asr": true,
+    "asr_model": "base", "max_asr_windows": 6, "max_review_clips": 6
+  },
+  "render": {
+    "intro_seconds": 10, "intro_countdown": true,
+    "canvas": "1920x1080", "fps": 30, "crf": 14,
+    "highlight_colour": "#FFA500", "preset": "fast", "sync_background": true
+  }
+}

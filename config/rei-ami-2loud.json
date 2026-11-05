@@ -1,0 +1,18 @@
+{
+  "source": "../REI AMI - 2Loud (1080).mp4",
+  "title": "2Loud",
+  "artist": "REI AMI",
+  "language": "en",
+  "mode": "music",
+  "background": "original",
+  "audio_quality": {
+    "threads": 4
+  },
+  "render": {
+    "canvas": "1920x1080",
+    "fps": 30,
+    "crf": 14,
+    "preset": "fast",
+    "intro_seconds": 10
+  }
+}

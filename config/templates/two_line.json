@@ -1,0 +1,15 @@
+{
+  "description": "Two larger lines per page, lower third.",
+  "lines_per_page": 2,
+  "font_name": "Arial",
+  "font_file": "C:/Windows/Fonts/arialbd.ttf",
+  "font_size": 76,
+  "text_colour": "#FFFFFF",
+  "highlight_colour": "#FFA500",
+  "outline_colour": "#101010",
+  "outline": 5,
+  "shadow": 1,
+  "line_spacing": 150,
+  "block_center_y": 760,
+  "max_text_width": 1640
+}

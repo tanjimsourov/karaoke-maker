@@ -1,0 +1,17 @@
+{
+  "source": "C:\\Users\\spicy\\Documents\\projects\\smc\\karaoke-git\\pro\\inputs\\Tobias Rahim - Mucki Bar (1080p).mp4",
+  "title": "Mucki Bar",
+  "artist": "Tobias Rahim",
+  "language": "da",
+  "mode": "music",
+  "background": "original",
+  "alignment_model": "saattrupdan/wav2vec2-xls-r-300m-ftspeech",
+  "audio_quality": {
+    "threads": 3,
+    "alternatives": []
+  },
+  "render": {
+    "fps": 30,
+    "crf": 14
+  }
+}

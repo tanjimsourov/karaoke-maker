@@ -1,0 +1,15 @@
+{
+  "description": "One centred line at a time, like Karadeo's Single Line template.",
+  "lines_per_page": 1,
+  "font_name": "Arial",
+  "font_file": "C:/Windows/Fonts/arialbd.ttf",
+  "font_size": 84,
+  "text_colour": "#FFFFFF",
+  "highlight_colour": "#FFD200",
+  "outline_colour": "#101010",
+  "outline": 6,
+  "shadow": 2,
+  "line_spacing": 0,
+  "block_center_y": 540,
+  "max_text_width": 1640
+}
