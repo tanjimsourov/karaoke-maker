@@ -93,7 +93,7 @@ def normalize(job, base=ROOT):
     r = j['render']
     allowed_render={'template','canvas','start','end','crf','preset','guide_vocal_level','pitch_semitones',
         'loudness_lufs','fade_in','fade_out','gap_countdown','motion','fps','intro_seconds','sync_background',
-        'highlight_colour','intro_countdown','encoder','nvenc_cq','countdown_style','countdown_colour'}
+        'highlight_colour','intro_countdown','encoder','nvenc_cq','countdown_style','countdown_colour','video_bitrate'}
     if set(r)-allowed_render: raise ValueError('Unknown render options: '+str(sorted(set(r)-allowed_render)))
     from intro_countdown import settings
     r.update(settings(r.get('countdown_style'),r.get('countdown_colour')))
@@ -101,7 +101,9 @@ def normalize(job, base=ROOT):
             not isinstance(r['highlight_colour'],str) or
             not re.fullmatch(r'#[0-9A-Fa-f]{6}',r['highlight_colour'])):
         raise ValueError('highlight_colour must be #RRGGBB')
-    if r['fps'] not in [24,25,30,50,60] or isinstance(r['fps'],bool): raise ValueError('Unsupported fps')
+    from output_size import resolve_fps
+    r['fps']=resolve_fps(r['fps'],j['source'])
+    if r.get('video_bitrate') is not None and (type(r['video_bitrate']) is not int or not 100000<=r['video_bitrate']<=50000000): raise ValueError('Invalid video bitrate')
     canvas = re.fullmatch(r'(\d{3,4})x(\d{3,4})', str(r['canvas']))
     if not canvas or any(int(x)%2 for x in canvas.groups()): raise ValueError('Canvas needs even WIDTHxHEIGHT')
     import math
@@ -263,7 +265,7 @@ def verify_preview(cfg, folder, branding=True):
     validation = read(folder/'preview-validation.json')
     from output_size import MAX_BYTES
     if Path(validation['output']).stat().st_size > MAX_BYTES:
-        raise ReviewRequired('Preview exceeds 150 MB. Re-render with the current size-limited renderer.')
+        raise ReviewRequired('Preview exceeds 100 MB. Re-render with the current size-limited renderer.')
     if validation['fingerprint'] != fingerprint(cfg, folder) or digest(validation['output']) != validation['sha256']:
         raise ReviewRequired('Preview changed. Render and review it again.')
     if branding:check_branding(validation['output'],folder/'branding-output.json')
@@ -318,7 +320,7 @@ def execute(stage, job, folder, args):
             print('Delivery review:',folder/'delivery-verification.json',flush=True)
             return
         if getattr(args, 'draft_export', False):
-            print('[DRAFT] Using unreviewed lyrics. No lyric/audio approval is recorded.', flush=True)
+            print('[AUTOMATIC] Processing generated lyrics; manual approval is not recorded.' if os.getenv('KARAOKE_SERVER_CONCURRENT')=='1' else '[DRAFT] Using unreviewed lyrics. No lyric/audio approval is recorded.', flush=True)
         else:
             require_lyrics(cfg, folder)
         if stage in ['run','align','quick-preview']:
@@ -380,13 +382,13 @@ def execute(stage, job, folder, args):
             if getattr(args,'verify_output',False):
                 from delivery_verification import build
                 call(folder,'delivery_verification',build,cfg,folder)
-            print('PREVIEW:', read(folder/'preview-validation.json')['output'], flush=True)
+            print('RENDER COMPLETE:' if os.getenv('KARAOKE_SERVER_CONCURRENT')=='1' else 'PREVIEW:', read(folder/'preview-validation.json')['output'], flush=True)
             print('Audio comparisons:', folder/'audio-quality/review/index.html', flush=True)
             if getattr(args, 'draft_export', False):
                 source = Path(read(folder/'preview-validation.json')['output'])
                 from output_size import MAX_BYTES
                 if source.stat().st_size > MAX_BYTES:
-                    raise ValueError('Draft exceeds 150 MB; refusing delivery')
+                    raise ValueError('Draft exceeds 100 MB; refusing delivery')
                 destination = OUT/(cfg['slug']+'_DRAFT.mp4')
                 OUT.mkdir(parents=True, exist_ok=True)
                 if destination.exists():
@@ -395,7 +397,7 @@ def execute(stage, job, folder, args):
                 else:
                     with source.open('rb') as incoming, destination.open('xb') as outgoing:
                         shutil.copyfileobj(incoming, outgoing)
-                print('DRAFT MP4 (unreviewed):', destination, flush=True)
+                print('EXPORT STAGED:' if os.getenv('KARAOKE_SERVER_CONCURRENT')=='1' else 'DRAFT MP4 (unreviewed):', destination, flush=True)
             return
         if stage == 'approve':
             if not all([args.listened,args.checked_lyrics,args.reviewed_audio,args.reviewed_timing]):
@@ -535,6 +537,9 @@ def main():
                 cleanup(plan_cleanup(folder))
                 print('Generated job data removed; verification receipts retained in reports/completed.',flush=True)
             results.append({'title':job['title'],'status':'completed','work':str(folder)})
+            if os.getenv('KARAOKE_SERVER_CONCURRENT')=='1' and (a.draft_export or a.stage=='render'):
+                artifact=OUT/(folder.name+('_DRAFT.mp4' if a.draft_export else '_Karaoke.mp4'))
+                print('[EXPORT_READY] '+json.dumps({'path':str(artifact)}),flush=True)
         except Exception as exc:
             status='needs_review' if isinstance(exc,ReviewRequired) else 'failed'
             if a.stage != 'cleanup' and folder and folder.exists() and not (folder/'running.lock').exists():

@@ -60,7 +60,8 @@ parser.add_argument("--gap-countdown", action="store_true", help="3-2-1 dots bef
 parser.add_argument("--motion", choices=["none", "pan"], default="none", help="Slow camera drift over the background")
 parser.add_argument("--metadata-title")
 parser.add_argument("--metadata-artist")
-parser.add_argument("--fps", type=int, choices=[24, 25, 30, 50, 60], default=25)
+parser.add_argument("--fps", type=float, default=25)
+parser.add_argument("--video-bitrate",type=int,default=None)
 parser.add_argument("--line-styles", type=Path, help="JSON list of per-line style overrides, in lyric order")
 parser.add_argument("--layers", type=Path, help="layers.json: text overlays, media layers, audio tracks")
 parser.add_argument('--intro-seconds', type=float, default=3.0)
@@ -78,7 +79,9 @@ for path_option in ('background_folder','background_file','output_dir','source_a
     if value is not None: setattr(args, path_option, value.resolve())
 if args.output_name and Path(args.output_name).name != args.output_name:
     parser.error('--output-name must be a filename, not a directory path')
-FPS = args.fps
+from output_size import resolve_fps
+FPS = resolve_fps(args.fps)
+if args.video_bitrate is not None and not 100000<=args.video_bitrate<=50000000:parser.error('Invalid video bitrate')
 if args.center_intro_countdown and not args.approved_intro:
     parser.error('--center-intro-countdown requires --approved-intro')
 if args.intro_countdown and (not args.approved_intro or args.preserve_source_timeline or args.intro_seconds<=0):
@@ -633,7 +636,11 @@ encoding = (['-c:v','libx264','-preset',args.preset,'-crf',str(args.crf)]
             if args.encoder == 'libx264' else
             ['-c:v','h264_nvenc','-preset','p4','-rc','vbr','-cq',str(args.nvenc_cq),'-b:v','0'])
 from output_size import constrained_args, enforce
-encoding += constrained_args(range_end-range_start)
+if args.video_bitrate is not None:
+    from output_size import bitrate_args
+    encoding = ['-c:v',args.encoder,'-preset',args.preset if args.encoder=='libx264' else 'p4'] + bitrate_args(range_end-range_start,args.video_bitrate)
+else:
+    encoding += constrained_args(range_end-range_start)
 if args.branding_plan:
     from inline_branding import filters
     cleanup = filters(background,args.branding_plan)

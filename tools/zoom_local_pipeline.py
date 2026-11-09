@@ -288,7 +288,7 @@ def delivery_folder(cfg):
 def render_options(cfg):
     """Optional per-song `render` block: layout, canvas, export range and audio mix."""
     options = {'template': 'four_line', 'canvas': '1920x1080', 'start': None, 'end': None,
-               'crf': 19, 'preset': 'veryfast', 'encoder':'libx264', 'nvenc_cq':19, 'guide_vocal_level': 0.0, 'pitch_semitones': 0.0,
+               'video_bitrate': None, 'video_bitrate': None, 'crf': 19, 'preset': 'veryfast', 'encoder':'libx264', 'nvenc_cq':19, 'guide_vocal_level': 0.0, 'pitch_semitones': 0.0,
                'loudness_lufs': None, 'fade_in': 0.0, 'fade_out': 0.0,
                'gap_countdown': False, 'motion': 'none', 'fps': 25,
                'intro_seconds': 3.0, 'intro_countdown': False, 'sync_background': False, 'highlight_colour': None,
@@ -304,6 +304,10 @@ def render_options(cfg):
         raise ValueError('guide_vocal_level needs separated vocals (local song workflow)')
     args = ['--template', str(options['template']), '--canvas', str(options['canvas']),
             '--crf', str(options['crf']), '--preset', str(options['preset'])]
+    if options['video_bitrate'] is not None:
+        args += ['--video-bitrate',str(options['video_bitrate'])]
+    if options['video_bitrate'] is not None:
+        args += ['--video-bitrate',str(options['video_bitrate'])]
     if options['encoder'] != 'libx264':
         args += ['--encoder',str(options['encoder']),'--nvenc-cq',str(options['nvenc_cq'])]
     if options['highlight_colour'] is not None:

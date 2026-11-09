@@ -4,10 +4,10 @@ $projectDirectory = Split-Path -Parent $PSScriptRoot
 $envPath = Join-Path $projectDirectory '.env'
 $settings = [ordered]@{
     KARAOKE_MEDIA_HOST_DIR = '"' + $MediaDirectory.Replace('\','/') + '"'
-    KARAOKE_DOCKER_CPUS = '4'
+    KARAOKE_DOCKER_CPUS = '8'
     KARAOKE_DOCKER_MEMORY = '12g'
-    KARAOKE_SERVER_WORKERS = '6'
-    KARAOKE_SERVER_THREADS = '1'
+    KARAOKE_SERVER_WORKERS = '3'
+    KARAOKE_SERVER_THREADS = '2'
     KARAOKE_SERVER_MODEL = 'htdemucs'
     KARAOKE_SERVER_PARALLEL = '1'
     KARAOKE_OCR_WORKERS = '2'
@@ -35,5 +35,5 @@ foreach ($key in $settings.Keys) {
     if (-not $seen.ContainsKey($key)) { $result.Add($key + '=' + $settings[$key]) }
 }
 [System.IO.File]::WriteAllLines($envPath,$result,[System.Text.UTF8Encoding]::new($false))
-Write-Host 'Configured automatic exports: 6 workers, 4 shared CPUs, 12 GB RAM cap, light model.'
+Write-Host 'Configured automatic exports: 3 workers, 8 shared CPUs, 2 threads per worker, 12 GB RAM cap, light model.'
 Write-Host 'No services restarted. Run docker compose up --build from the project folder.'

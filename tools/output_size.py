@@ -1,19 +1,19 @@
-"""Duration-aware 150 MB delivery ceiling (decimal bytes, never truncate media)."""
+"""Duration-aware 100 MB delivery ceiling (decimal bytes, never truncate media)."""
 import math
 import subprocess
 from pathlib import Path
 import av
 from project_runtime import FFMPEG
 
-MAX_BYTES = 150_000_000
-TARGET_BYTES = 140_000_000
+MAX_BYTES = 99_999_999
+TARGET_BYTES = 90_000_000
 
 def video_budget(duration, audio_bps=192000):
     if not math.isfinite(duration) or duration <= 0:
         raise ValueError('Invalid output duration')
     rate = int(TARGET_BYTES * 8 / duration - audio_bps)
     if rate < 100000:
-        raise ValueError('Video is too long for the 150 MB limit with this audio bitrate')
+        raise ValueError('Video is too long for the 100 MB limit with this audio bitrate')
     return rate
 
 def constrained_args(duration, audio_bps=192000):
@@ -35,7 +35,7 @@ def enforce(path):
     target=path.with_name(path.stem+'.size-limit.mp4')
     if target.exists():raise FileExistsError(target)
     for attempt in range(2):
-        print(f'[SIZE] Compressing to <=150 MB, attempt {attempt+1}',flush=True)
+        print(f'[SIZE] Compressing to <=100 MB, attempt {attempt+1}',flush=True)
         subprocess.run([str(FFMPEG),'-hide_banner','-nostdin','-y','-i',str(path),
             '-map','0:v:0','-map','0:a:0','-c:v','libx264','-preset','fast',
             '-threads','4','-b:v',str(rate),'-maxrate',str(rate),'-bufsize',str(rate),
@@ -56,3 +56,20 @@ def enforce(path):
 if __name__=='__main__':
     import sys
     enforce(sys.argv[1])
+
+
+def resolve_fps(value, source=None):
+    if value == 'source':
+        with av.open(str(source)) as media:
+            rate=media.streams.video[0].average_rate
+        if rate is None:raise ValueError('Source frame rate unavailable')
+        value=min(float(rate),30.)
+    if isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(value) or not 1<=value<=60:
+        raise ValueError('Unsupported fps')
+    return value
+
+
+def bitrate_args(duration, target, audio_bps=192000):
+    if type(target) is not int or not 100000<=target<=50000000:raise ValueError('Invalid video bitrate')
+    rate=min(target,video_budget(duration,audio_bps))
+    return ['-b:v',str(rate),'-maxrate',str(rate),'-bufsize',str(rate*2)]

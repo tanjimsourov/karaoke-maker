@@ -35,7 +35,7 @@ class DeploymentTests(unittest.TestCase):
         for line in (ROOT/'.env').read_text().splitlines():
             if '=' in line and not line.lstrip().startswith('#'):
                 k,v=line.split('=',1);values[k]=v.strip('"')
-        self.assertEqual(values['KARAOKE_MEDIA_HOST_DIR'],'D:/Application/Website/ftpPrivate/XtendaMix/Top 40/Nov 2026')
+        self.assertEqual(values['KARAOKE_MEDIA_HOST_DIR'],'D:/Application/Website/ftpPrivate/Danish New')
         self.assertEqual(values['KARAOKE_COUNTDOWN_COLOUR'],'#BB3794')
         self.assertEqual(values['KARAOKE_CLEANUP_AFTER_RUN'],'1')
         self.assertTrue((ROOT/values['KARAOKE_LOGO']).is_file())
@@ -52,8 +52,8 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(service['pids_limit'],512)
         values=dict(line.split('=',1) for line in (ROOT/'.env').read_text().splitlines()
                     if '=' in line and not line.lstrip().startswith('#'))
-        self.assertEqual(values['KARAOKE_SERVER_WORKERS'],'2')
-        self.assertEqual(values['KARAOKE_DOCKER_CPUS'],'2')
-        self.assertEqual(values['KARAOKE_DOCKER_MEMORY'],'10g')
+        self.assertEqual(values['KARAOKE_SERVER_WORKERS'],'3')
+        self.assertEqual(values['KARAOKE_DOCKER_CPUS'],'8')
+        self.assertEqual(values['KARAOKE_DOCKER_MEMORY'],'12g')
 
 if __name__=='__main__':unittest.main()

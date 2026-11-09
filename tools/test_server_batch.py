@@ -114,6 +114,31 @@ class ServerTests(unittest.TestCase):
                 output=list((media/'karaoke').glob('*.mp4'))
                 self.assertEqual(len(output),1);self.assertEqual(output[0].read_bytes(),b'video')
 
+    def test_export_published_and_cleaned_before_child_exit(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);(root/'tools').mkdir();media=root/'media';media.mkdir()
+            source=media/'Artist - Song.mp4';source.write_bytes(b'input')
+            # Child refuses to exit until publication AND cleanup have happened.
+            (root/'karaoke.py').write_text("""import os,pathlib,json,time
+p=pathlib.Path(os.environ['KARAOKE_OUTPUT_DIR'])
+p.mkdir(parents=True,exist_ok=True)
+a=p/'test-job_DRAFT.mp4';a.write_bytes(b'video')
+print('[EXPORT_READY] '+json.dumps({'path':str(a)}),flush=True)
+out=pathlib.Path(__file__).parent/'media/karaoke'
+for _ in range(100):
+    if list(out.glob('*.mp4')) and not p.parent.exists():break
+    time.sleep(.05)
+else:raise RuntimeError('Publication waited for child exit')
+(pathlib.Path(__file__).parent/'observed').write_text('published before exit')
+""")
+            args=argparse.Namespace(language='da',model='htdemucs',threads=2,retry_failed=True,parallel=False,cleanup_song=True)
+            with patch.object(server,'ROOT',root),patch('workflow.normalize',return_value=({},root/'work/test-job')):
+                self.assertEqual(server.run_one(source,media,media/'karaoke',root/'reports',args),'draft_exported')
+            self.assertTrue((root/'observed').exists())
+            self.assertEqual(source.read_bytes(),b'input')
+            self.assertFalse(list((root/'reports').glob('*.log')))
+            self.assertEqual(len(list((media/'karaoke').glob('*.mp4'))),1)
+
     def test_child_failure_not_published(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);(root/'tools').mkdir();media=root/'media';media.mkdir()
