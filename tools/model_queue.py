@@ -9,6 +9,27 @@ from project_runtime import ROOT
 
 
 @contextmanager
+def resource_slots(name, slots=1, root=ROOT, timeout=14400):
+    """Bound independent workers without serializing all of their work."""
+    if not re.fullmatch(r'[a-z][a-z0-9_-]{0,27}',name) or not 1<=slots<=6:
+        raise ValueError('Invalid resource pool')
+    deadline=time.monotonic()+timeout
+    announced=False
+    while True:
+        for index in range(slots):
+            slot=model_slot(root,timeout=0,name=name if slots==1 else f'{name}-{index}')
+            try:slot.__enter__()
+            except TimeoutError:continue
+            try:yield
+            finally:slot.__exit__(None,None,None)
+            return
+        if time.monotonic()>=deadline:raise TimeoutError('Resource pool busy: '+name)
+        if not announced:
+            print(f'Queued: waiting for one of {slots} {name} slots.',flush=True);announced=True
+        time.sleep(min(.2,max(0,deadline-time.monotonic())))
+
+
+@contextmanager
 def model_slot(root=ROOT, timeout=14400, name='model'):
     if not re.fullmatch(r'[a-z][a-z0-9_-]{0,31}',name):raise ValueError('Invalid processing slot name')
     path=Path(root)/f'work/.{name}-runtime.lock'

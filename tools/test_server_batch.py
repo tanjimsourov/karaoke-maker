@@ -9,6 +9,43 @@ from unittest.mock import patch
 import server_batch as server
 
 class ServerTests(unittest.TestCase):
+    def test_six_workers_fill_and_drain_queue(self):
+        import threading
+        barrier=threading.Barrier(6);lock=threading.Lock()
+        active=0;peak=0;completed=[]
+        def worker(number):
+            nonlocal active,peak
+            with lock:active+=1;peak=max(peak,active)
+            if number<6:barrier.wait(timeout=5)
+            with lock:active-=1;completed.append(number)
+            return number
+        results=server.run_queue(list(range(18)),worker,6)
+        self.assertEqual(peak,6)
+        self.assertEqual(sorted(results),list(range(18)))
+        self.assertEqual(sorted(completed),list(range(18)))
+    def test_operational_failure_retried_but_review_stop_not_bypassed(self):
+        args=argparse.Namespace(attempts=2,retry_failed=False)
+        with patch.object(server,'run_one',side_effect=['failed','draft_exported']) as run,patch('server_batch.time.sleep'):
+            result=server.run_with_retries(Path('song.mp4'),Path('.'),Path('out'),Path('reports'),args)
+            self.assertEqual(result['status'],'draft_exported')
+            self.assertEqual(result['attempts'],2)
+            self.assertEqual(run.call_count,2)
+        with patch.object(server,'run_one',return_value='needs_review') as run:
+            result=server.run_with_retries(Path('song.mp4'),Path('.'),Path('out'),Path('reports'),args)
+            self.assertEqual(result['status'],'needs_review')
+            self.assertEqual(run.call_count,1)
+
+    def test_preflight_exception_has_persistent_diagnostic(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);source=root/'broken.mp4';report=root/'karaoke/.karaoke-status'
+            args=argparse.Namespace(attempts=2,retry_failed=False)
+            with patch.object(server,'run_one',side_effect=ValueError('bad metadata')),patch('server_batch.time.sleep'):
+                result=server.run_with_retries(source,root,root/'karaoke',report,args)
+            self.assertEqual(result['status'],'failed')
+            record=json.loads(next(report.glob('*.json')).read_text())
+            self.assertEqual(record['source'],str(source))
+            self.assertEqual(record['error'],'bad metadata')
+
     def test_cleanup_preserves_models_sources_and_published_videos(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)
@@ -86,5 +123,40 @@ class ServerTests(unittest.TestCase):
             with patch.object(server,'ROOT',root),patch('workflow.normalize',return_value=({},root/'work/test-job')):
                 self.assertEqual(server.run_one(source,media,media/'karaoke',root/'reports',args),'needs_review')
                 self.assertFalse((media/'karaoke').exists())
+
+    def test_verified_delivery_withholds_unreviewed_child_output(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);(root/'tools').mkdir();media=root/'media';media.mkdir()
+            source=media/'Artist - Song.mp4';source.write_bytes(b'input')
+            (root/'karaoke.py').write_text(
+                "import os,pathlib\np=pathlib.Path(os.environ['KARAOKE_OUTPUT_DIR']);"
+                "p.mkdir(parents=True,exist_ok=True);(p/'test-job_DRAFT.mp4').write_bytes(b'video')\n")
+            args=argparse.Namespace(language='da',model='htdemucs',threads=2,retry_failed=True,parallel=False,cleanup_song=True,delivery_mode="verified")
+            with patch.object(server,'ROOT',root),patch('workflow.normalize',return_value=({},root/'work/test-job')):
+                self.assertEqual(server.run_one(source,media,media/'karaoke',root/'reports',args),'needs_review')
+            self.assertFalse(list((media/'karaoke').glob('*.mp4')))
+            self.assertTrue(list((root/'work/server-jobs').glob('*/exports/*_DRAFT.mp4')))
+            records=[json.loads(f.read_text()) for f in (root/'reports').glob('*.json') if not f.name.endswith('.job.json')]
+            self.assertFalse(records[0]['reviewed'])
+
+    def test_reviewed_job_uses_render_and_retains_receipt_before_cleanup(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);(root/'tools').mkdir();media=root/'media';media.mkdir()
+            source=media/'Artist - Song.mp4';source.write_bytes(b'input')
+            identity=server.hashlib.sha256(source.name.encode()).hexdigest()[:20]
+            job=root/'work/server-jobs'/identity/'jobs/test-job';job.mkdir(parents=True)
+            (job/'full-review.json').write_text('{}')
+            for name in ['delivery-review.json','delivery-verification.json']:(job/name).write_text('{}')
+            (root/'karaoke.py').write_text(
+                "import os,pathlib,sys\nassert sys.argv[1]=='render' and '--keep-work' in sys.argv\n"
+                "p=pathlib.Path(os.environ['KARAOKE_OUTPUT_DIR']);p.mkdir(parents=True,exist_ok=True);"
+                "(p/'test-job_Karaoke.mp4').write_bytes(b'verified-fixture')\n")
+            args=argparse.Namespace(language='da',model='htdemucs',threads=2,retry_failed=True,parallel=False,cleanup_song=True,delivery_mode="verified")
+            with patch.object(server,'ROOT',root),patch('workflow.normalize',return_value=({},root/'work/test-job')):
+                self.assertEqual(server.run_one(source,media,media/'karaoke',root/'reports',args),'verified_exported')
+            receipt=json.loads((root/'reports'/(identity+'.json')).read_text())
+            self.assertTrue(receipt['reviewed']);self.assertIn('verification',receipt)
+            self.assertEqual(Path(receipt['output']).read_bytes(),b'verified-fixture')
+            self.assertFalse(job.exists())
 
 if __name__=='__main__':unittest.main()

@@ -11,6 +11,8 @@ import re
 import numpy as np
 import subprocess
 import uuid
+import os
+from collections import OrderedDict
 from pathlib import Path
 import av
 from zoom_local_pipeline import digest,read,save
@@ -69,8 +71,10 @@ def scan(video,report_path,interval=1.0,width=1280,engine=None):
             if prior.get('binding')==scan_binding(video,interval,width) and prior.get('complete'):
                 if prior['hits']:raise BrandingDetected(f'Source branding remains; see {report_path}')
                 return prior
-        from model_queue import model_slot
-        with model_slot(name='ocr'):
+        from model_queue import resource_slots
+        slots=int(os.getenv('KARAOKE_OCR_WORKERS','1'))
+        if not 1<=slots<=2:raise ValueError('KARAOKE_OCR_WORKERS must be 1 or 2')
+        with resource_slots('ocr',slots):
             return _scan(video,report_path,interval,width,None)
     return _scan(video,report_path,interval,width,engine)
 
@@ -102,6 +106,7 @@ def _scan(video,report_path,interval,width,engine):
     save_report(report_path,result)
     last_scanned=result.get('last_sample_seconds',-interval)
     target=last_scanned+interval;last_image=None;last_time=0.
+    identical_frames=OrderedDict()
     def inspect(image,t):
         nonlocal last_scanned
         # Convert/rescale only sampled frames; inspect all of their pixels.
@@ -109,7 +114,17 @@ def _scan(video,report_path,interval,width,engine):
         if im.shape[1]>width:
             import cv2
             im=cv2.resize(im,(width,round(im.shape[0]*width/im.shape[1])))
-        rows,_=engine(im,use_cls=False)
+        # Exact pixel equality after the same resize: preserve all sample times,
+        # coordinates and hits without repeating inference on static frames.
+        key=(im.shape,hashlib.sha256(im.tobytes()).digest())
+        if key in identical_frames:
+            rows=identical_frames[key];identical_frames.move_to_end(key)
+            result['reused_identical_samples']=result.get('reused_identical_samples',0)+1
+        else:
+            rows,_=engine(im,use_cls=False)
+            identical_frames[key]=rows
+            if len(identical_frames)>32:identical_frames.popitem(last=False)
+            result['ocr_inferences']=result.get('ocr_inferences',0)+1
         found=[]
         for row in rows or []:
             box,text,confidence=row[:3]

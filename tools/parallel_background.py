@@ -19,7 +19,8 @@ class BackgroundJob:
         self.process = subprocess.Popen(
             [sys.executable, '-u', __file__, self.source, str(self.folder),
              'optimized' if self.optimized else 'standard'],
-            env={**os.environ, 'OMP_NUM_THREADS':'2', 'MKL_NUM_THREADS':'2'})
+            env={**os.environ, 'OMP_NUM_THREADS':os.environ.get('OMP_NUM_THREADS','2'),
+                 'MKL_NUM_THREADS':os.environ.get('MKL_NUM_THREADS','2')})
         print('[PARALLEL] Background screening started alongside audio stages', flush=True)
         return self
 

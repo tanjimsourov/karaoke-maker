@@ -1,0 +1,27 @@
+{
+    "source":  "C:\\Users\\spicy\\Documents\\projects\\smc\\karaoke-git\\pro\\inputs\\ftp-2026-11-07\\Saybia - The Second You Sleep.mp4",
+    "profile":  "optimized",
+    "render":  {
+                   "intro_countdown":  true,
+                   "countdown_style":  "arc",
+                   "countdown_colour":  "#BB3794",
+                   "intro_seconds":  10,
+                   "fps":  30,
+                   "canvas":  "1920x1080"
+               },
+    "background":  "C:\\Users\\spicy\\Documents\\projects\\smc\\karaoke-git\\pro\\assets\\audio-bg\\2.jpeg",
+    "artist":  "Saybia",
+    "audio_quality":  {
+                          "threads":  1,
+                          "alternatives":  [
+
+                                           ]
+                      },
+    "separation":  {
+                       "overlap":  0.25,
+                       "model":  "htdemucs"
+                   },
+    "mode":  "music",
+    "language":  "en",
+    "title":  "The Second You Sleep"
+}

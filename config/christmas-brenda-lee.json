@@ -1,0 +1,28 @@
+{
+    "source":  "C:\\Users\\spicy\\Documents\\projects\\smc\\karaoke-git\\pro\\inputs\\christmas-ftp\\Rockin Around The Christmas Tree.mp3",
+    "profile":  "optimized",
+    "audio_quality":  {
+                          "threads":  2,
+                          "alternatives":  [
+
+                                           ]
+                      },
+    "background":  "C:\\Users\\spicy\\Documents\\projects\\smc\\karaoke-git\\pro\\assets\\audio-bg\\6.jpeg",
+    "artist":  "Brenda Lee",
+    "separation":  {
+                       "overlap":  0.25,
+                       "model":  "htdemucs"
+                   },
+    "render":  {
+                   "intro_countdown":  true,
+                   "countdown_style":  "arc",
+                   "countdown_colour":  "#BB3794",
+                   "intro_seconds":  10,
+                   "fps":  30,
+                   "canvas":  "1920x1080",
+                   "preset":  "veryfast"
+               },
+    "mode":  "music",
+    "language":  "en",
+    "title":  "Rockin\u0027 Around The Christmas Tree"
+}

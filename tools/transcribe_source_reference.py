@@ -1,5 +1,6 @@
 """Create an explicitly unreviewed transcription from a supplied original recording."""
 import argparse
+import os
 from pathlib import Path
 from project_runtime import MODELS
 from zoom_local_pipeline import audio, digest, save
@@ -11,9 +12,11 @@ def main():
     p.add_argument('--output',type=Path,required=True)
     p.add_argument('--language',required=True)
     p.add_argument('--prompt',default='')
+    p.add_argument('--threads',type=int,default=int(os.getenv('KARAOKE_SERVER_THREADS','2')))
     a=p.parse_args()
+    if not 1 <= a.threads <= 8:p.error('threads must be 1..8')
     if a.output.exists():raise FileExistsError(a.output)
-    model=WhisperModel('large-v3-turbo',device='cpu',compute_type='int8',cpu_threads=6,
+    model=WhisperModel('large-v3-turbo',device='cpu',compute_type='int8',cpu_threads=a.threads,
                        download_root=str(MODELS/'whisper'),local_files_only=True)
     segments,info=model.transcribe(audio(a.source),language=a.language,beam_size=5,
         vad_filter=False,condition_on_previous_text=False,word_timestamps=True,

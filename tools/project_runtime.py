@@ -99,3 +99,10 @@ def ffmpeg_thread_args():
     if not value.isdigit() or not 1<=int(value)<=64:
         raise ValueError('KARAOKE_FFMPEG_THREADS must be 1..64')
     return ['-threads:v',str(int(value))]
+
+
+def ffmpeg_input_filter_args():
+    value=os.environ.get('KARAOKE_FFMPEG_FILTER_THREADS',os.environ.get('KARAOKE_FFMPEG_THREADS','2'))
+    if not value.isdigit() or not 1<=int(value)<=64:
+        raise ValueError('FFmpeg input/filter threads must be 1..64')
+    return ['-filter_complex_threads',str(int(value)),'-threads',str(int(value))]

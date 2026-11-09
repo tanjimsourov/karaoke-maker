@@ -1,0 +1,24 @@
+Server batch update - 2026-11-09
+
+Copy docker-compose.yml and tools/server_batch.py and tools/build_bowlnfun_karaoke.py and tools/zoom_local_pipeline.py from this project to the same paths in D:\karaoke-tool\karaoke-maker. Preserve the server .env file.
+
+From that server project folder, after the current batch has stopped:
+  docker compose up -d --build
+
+This rebuilds/starts this Compose project only. Do not use docker system prune or global stop commands.
+
+Changes:
+- Up to two attempts for operational failures (KARAOKE_SERVER_ATTEMPTS=2; maximum 3).
+- Review/quality stops are NOT silently approved.
+- Stable reports in the input folder's karaoke/.karaoke-status survive runtime cleanup.
+- batch-summary.json lists filenames, attempts and status counts.
+- Failure JSON and bounded 16 KB log tails retain the actual error.
+- Completed song temporary files are still removed.
+- Public output names use Karaoke rather than Karaoke DRAFT; reviewed=false remains explicit in receipts.
+- Intro ring processing is limited to the intro, avoiding unnecessary per-frame ring calculations over the full song.
+
+Existing exports with old recipe hashes remain untouched. Code changes change recipe hashes and may produce a new version rather than skip an older export.
+The supplied old log only shows Animal successfully exported, not the individual failure causes. This update is not proof that all previously failed sources are repaired. Read the next batch-summary and per-song errors.
+
+Validation: 9 server batch unit/integration tests passed locally. Server Docker runtime not exercised here.
+

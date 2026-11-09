@@ -243,7 +243,10 @@ def fingerprint(cfg, work):
     elif not template.is_absolute():
         template = ROOT/template
     dependencies = list((ROOT/'tools').glob('*.py')) + [template, font_file()]
-    return {'config': cfg, 'countdown':countdown, 'files': {str(p): digest(p) for p in [
+    layout={key:os.getenv(key,default) for key,default in {
+        'KARAOKE_STILL_FIT':'contain','KARAOKE_INTRO_LOGO_SCALE':'1',
+        'KARAOKE_CORNER_MARGIN_X':'48','KARAOKE_CORNER_MARGIN_Y':'42'}.items()}
+    return {'config': cfg, 'countdown':countdown, 'layout':layout, 'files': {str(p): digest(p) for p in [
         Path(cfg['vocal_reference']), Path(cfg['zoom_video']), Path(cfg['background']), LOGO,
         work/'aligned.json', work/'sync.json', work/'transcript.json', RENDERER, Path(__file__),
         ROOT/'tools/prepare_zoom_local.py', *dependencies]}}

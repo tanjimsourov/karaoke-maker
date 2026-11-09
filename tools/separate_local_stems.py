@@ -118,6 +118,8 @@ def main():
         p.error('Partial/untracked stems exist; use a new directory')
     torch.manual_seed(0)
     torch.set_num_threads(args.threads)
+    if os.environ.get('KARAOKE_DISABLE_MKLDNN') == '1':
+        torch.backends.mkldnn.enabled = False
     start = time.monotonic()
     # Same model/settings on GPU or CPU; only speed differs, so the manifest stays valid.
     if component is None:

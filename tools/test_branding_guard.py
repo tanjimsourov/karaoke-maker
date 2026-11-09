@@ -10,12 +10,31 @@ from workflow import check_branding,ReviewRequired
 
 
 class BrandingTests(unittest.TestCase):
+    def test_identical_samples_reuse_inference_but_preserve_every_hit_time(self):
+        with tempfile.TemporaryDirectory() as temp:
+            p=Path(temp)/'v.mp4';p.write_bytes(b'fixture');report=Path(temp)/'r.json'
+            frames=[]
+            for t in range(30):
+                frame=Mock();frame.time=float(t)
+                frame.to_ndarray.return_value=np.zeros((600,800,3),dtype=np.uint8);frames.append(frame)
+            container=MagicMock();container.__enter__.return_value=container
+            container.decode.return_value=iter(frames)
+            engine=Mock(return_value=([([[0,0],[100,0],[100,20],[0,20]],'Xtendamix',.9)],None))
+            with patch('branding_guard.av.open',return_value=container):
+                with self.assertRaises(BrandingDetected):scan(p,report,engine=engine)
+            import json
+            result=json.loads(report.read_text())
+            self.assertEqual(engine.call_count,1)
+            self.assertEqual(result['sampled_frames'],30)
+            self.assertEqual(result['reused_identical_samples'],29)
+            self.assertEqual([h['time'] for h in result['hits']],list(range(30)))
+
     def test_interrupted_scan_resumes_saved_frame_without_claiming_completion(self):
         with tempfile.TemporaryDirectory() as temp:
             p=Path(temp)/'v.mp4';p.write_bytes(b'fixture');report=Path(temp)/'r.json'
             frames=[]
             for t in (0.,1.):
-                frame=Mock();frame.time=t;frame.to_ndarray.return_value=np.zeros((600,800,3),dtype=np.uint8);frames.append(frame)
+                frame=Mock();frame.time=t;frame.to_ndarray.return_value=np.full((600,800,3),int(t),dtype=np.uint8);frames.append(frame)
             container=MagicMock();container.__enter__.return_value=container
             container.decode.side_effect=lambda **kw:iter(frames)
             with patch('branding_guard.av.open',return_value=container):
@@ -67,7 +86,8 @@ class BrandingTests(unittest.TestCase):
         from workflow import verify_preview
         with patch('workflow.read',return_value={'fingerprint':'same','output':'video','sha256':'hash'}), \
              patch('workflow.fingerprint',return_value='same'),patch('workflow.digest',return_value='hash'), \
-             patch('workflow.check_branding',side_effect=ReviewRequired('Mark remains')) as gate:
+             patch('workflow.check_branding',side_effect=ReviewRequired('Mark remains')) as gate, \
+             patch('pathlib.Path.stat',return_value=type('Stat',(),{'st_size':1})()):
             with self.assertRaisesRegex(ReviewRequired,'Mark remains'):
                 verify_preview({},Path('job'))
             gate.assert_called_once()

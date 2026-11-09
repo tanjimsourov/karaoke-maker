@@ -10,6 +10,7 @@ import argparse
 import json
 import re
 import math
+import os
 import subprocess
 from pathlib import Path
 from PIL import ImageFont
@@ -17,7 +18,7 @@ import av
 import layers as layer_tools
 import intro_countdown
 
-from project_runtime import ROOT, FFMPEG, LOGO, font_file, ffmpeg_thread_args
+from project_runtime import ROOT, FFMPEG, LOGO, font_file, ffmpeg_thread_args, ffmpeg_input_filter_args
 BACKGROUNDS = sorted((ROOT / "audio-bg-sample").glob("*.jpeg"))
 INTRO_DELAY = 2.60
 
@@ -484,6 +485,11 @@ ass_filter = output_ass.name  # FFmpeg cwd is song_dir; avoids drive/quote escap
 fit = f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1"
 # Video backgrounds loop for the whole song; stills may drift slowly ("pan").
 background_is_video = Path(background).suffix.lower() in (".mp4", ".mov", ".webm", ".mkv")
+if not background_is_video:
+    # Preserve the entire still image. Fill/crop removes heads on portrait photos.
+    fit = f"scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1"
+    if os.environ.get('KARAOKE_STILL_FIT') == 'cover-top':
+        fit = f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H}:(iw-ow)/2:0,setsar=1"
 if background_is_video:
     fit = f"fps={FPS}," + fit
     if args.sync_background:
@@ -592,11 +598,18 @@ if args.intro_countdown:
             f"[bgraw][introbackground]overlay=0:0:enable='lt(t,{INTRO_DELAY:g})'[bg];"
         )
     background_label='bgx' if media_chains else 'bg'
+    intro_scale = float(os.environ.get('KARAOKE_INTRO_LOGO_SCALE', '1'))
+    corner_margin_x = int(os.environ.get('KARAOKE_CORNER_MARGIN_X', '48'))
+    corner_margin_y = int(os.environ.get('KARAOKE_CORNER_MARGIN_Y', '42'))
+    if not math.isfinite(intro_scale) or not 0.1 <= intro_scale <= 1:
+        raise ValueError('KARAOKE_INTRO_LOGO_SCALE must be between 0.1 and 1')
+    if not 0 <= corner_margin_x <= 300 or not 0 <= corner_margin_y <= 300:
+        raise ValueError('Corner margins must be between 0 and 300')
     filter_graph = background_filter + media_chains + (
-        f"[2:v]format=rgba,loop=loop=-1:size=1:start=0,setpts=N/({FPS}*TB),{intro_countdown.reference_logo_filter(INTRO_DELAY,FS,countdown_settings['countdown_style'],countdown_settings['countdown_colour'])}[intrologo];"
+        f"[2:v]format=rgba,loop=loop=-1:size=1:start=0,setpts=N/({FPS}*TB),trim=duration={INTRO_DELAY:g},{intro_countdown.reference_logo_filter(INTRO_DELAY,FS*intro_scale,countdown_settings['countdown_style'],countdown_settings['countdown_colour'])}[intrologo];"
         f"[{corner_index}:v]format=rgba,loop=loop=-1:size=1:start=0,setpts=N/({FPS}*TB),scale={px(180*FS)}:-1[cornerlogo];"
         f"[{background_label}][intrologo]overlay=x='{num(W/2)}-w/2':y='{num(330*SY)}-h/2':enable='lt(t,{INTRO_DELAY:g})'[opening];"
-        f"[opening][cornerlogo]overlay=W-w-{px(48*FS)}:{px(42*FS)}:enable='gte(t,{INTRO_DELAY:g})',subtitles='{ass_filter}'[v];"
+        f"[opening][cornerlogo]overlay=W-w-{px(corner_margin_x*FS)}:{px(corner_margin_y*FS)}:enable='gte(t,{INTRO_DELAY:g})',subtitles='{ass_filter}'[v];"
         + audio_graph(round(INTRO_DELAY*1000))
     )
 staged_mp4 = output_mp4.with_name(output_mp4.stem + '.rendering.mp4')
@@ -628,7 +641,7 @@ if args.branding_plan:
         # Source coordinates and times, BEFORE scaling, frame-rate conversion or intro padding.
         filter_graph=filter_graph.replace('[0:v]',f'[0:v]{cleanup},',1)
 command = [
-    str(FFMPEG), "-y", '-filter_complex_threads','2', '-threads','2', *background_input, "-i", str(audio), *logo_input, "-framerate", str(FPS), "-i", str(logo_asset),
+    str(FFMPEG), "-y", *ffmpeg_input_filter_args(), *background_input, "-i", str(audio), *logo_input, "-framerate", str(FPS), "-i", str(logo_asset),
     *extra_inputs, "-filter_complex", filter_graph, "-map", "[v]", "-map", "[a]", "-shortest", *trim, "-t", str(range_end - range_start),
     "-r", str(FPS), *encoding, *ffmpeg_thread_args(), "-pix_fmt", "yuv420p",
     "-c:a", "aac", "-b:a", "192k", '-map_metadata', '-1', *metadata, "-movflags", "+faststart", str(staged_mp4),

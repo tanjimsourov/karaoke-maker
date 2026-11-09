@@ -21,7 +21,7 @@ from audio_quality import settings as quality_settings
 import separation_guard
 
 STAGES = ['run', 'doctor', 'status', 'separate', 'audio-qc', 'transcribe', 'lyrics-review', 'quick-preview',
-          'align', 'preview', 'approve', 'render', 'extras', 'edit', 'clip', 'layer',
+          'align', 'preview', 'verify', 'approve', 'render', 'extras', 'edit', 'clip', 'layer',
           'translate', 'accept-translation', 'lyrics', 'history', 'restore', 'check-timing', 'cleanup']
 ADVANCED = {'edit','clip','layer','translate','accept-translation','lyrics','history','restore','check-timing'}
 
@@ -311,6 +311,12 @@ def execute(stage, job, folder, args):
         if stage in ADVANCED:
             local.run_stage(stage, cfg, folder, args.advanced)
             return
+        if stage == 'verify':
+            verify_preview(cfg, folder)
+            from delivery_verification import build
+            report = call(folder,'delivery_verification',build,cfg,folder)
+            print('Delivery review:',folder/'delivery-verification.json',flush=True)
+            return
         if getattr(args, 'draft_export', False):
             print('[DRAFT] Using unreviewed lyrics. No lyric/audio approval is recorded.', flush=True)
         else:
@@ -371,6 +377,9 @@ def execute(stage, job, folder, args):
                 except ReviewRequired: call(folder,'render',render,cfg,folder,preview=True)
             else: call(folder,'render',render,cfg,folder,preview=True)
             call(folder,'output_branding_verification',check_branding,read(folder/'preview-validation.json')['output'],folder/'branding-output.json')
+            if getattr(args,'verify_output',False):
+                from delivery_verification import build
+                call(folder,'delivery_verification',build,cfg,folder)
             print('PREVIEW:', read(folder/'preview-validation.json')['output'], flush=True)
             print('Audio comparisons:', folder/'audio-quality/review/index.html', flush=True)
             if getattr(args, 'draft_export', False):
@@ -393,6 +402,10 @@ def execute(stage, job, folder, args):
                 raise ReviewRequired('Approval requires --listened --checked-lyrics --reviewed-audio --reviewed-timing')
             separation_guard.validate(job['source'], folder/'audio-quality')
             verify_preview(cfg, folder); local.require_translation_review(cfg, folder)
+            from delivery_verification import approve as approve_delivery
+            if not getattr(args,'verification_decisions',None):
+                raise ReviewRequired('Run verify and supply --verification-decisions after resolving its issues')
+            approve_delivery(cfg,folder,args.verification_decisions)
             local.approve(cfg, folder, True)
             save(folder/'full-review.json', {'fingerprint':fingerprint(cfg,folder),
                 'reviewer':args.reviewer, 'listened':True, 'checked_lyrics':True,
@@ -400,6 +413,8 @@ def execute(stage, job, folder, args):
             return
         if stage == 'render':
             separation_guard.validate(job['source'], folder/'audio-quality')
+            from delivery_verification import require_approved
+            require_approved(cfg,folder)
             if not (folder/'full-review.json').exists() or read(folder/'full-review.json')['fingerprint'] != fingerprint(cfg,folder):
                 raise ReviewRequired('Full review is missing/stale. Run approve after reviewing the preview.')
             verify_preview(cfg, folder); local.require_translation_review(cfg, folder)
@@ -468,6 +483,8 @@ def main():
     p.add_argument('--warm-models',action='store_true',help='Reuse bounded resident models across manifest jobs')
     p.add_argument('--parallel-stages',action='store_true',help='Overlap isolated background preparation with audio stages; dependencies and reviews remain enforced')
     p.add_argument('--draft-export',action='store_true',help='run only: export an unreviewed DRAFT MP4 without recording lyric approval')
+    p.add_argument('--verify-output',action='store_true',help='Build source-comparison and delivery review evidence after rendering')
+    p.add_argument('--verification-decisions',type=Path,help='Completed per-issue review decisions for approve')
     p.add_argument('--preview-start',type=float,default=0,help='quick-preview: output timeline start, including intro')
     p.add_argument('--preview-seconds',type=float,default=20,help='quick-preview: 1 to 60 seconds')
     for flag in ['listened','checked-lyrics','reviewed-audio','reviewed-timing']: p.add_argument('--'+flag,action='store_true')

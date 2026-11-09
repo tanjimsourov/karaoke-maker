@@ -114,7 +114,8 @@ def cleanup(plan, root=None):
     archive = Path(root or ROOT)/'reports/completed'/folder.name/fresh['sha256'][:16]
     archive.mkdir(parents=True,exist_ok=True)
     for name in ['validation.json','preview-validation.json','sample-export.json',
-                 'full-review.json','timing-report.json','state.json','layers.json','stage-metrics.jsonl']:
+                 'full-review.json','timing-report.json','state.json','layers.json','stage-metrics.jsonl',
+                 'delivery-verification.json','delivery-review.json','verification-reference-binding.json']:
         source = folder/name
         if source.is_file(): shutil.copy2(source,archive/name)
     (archive/'cleanup.json').write_text(json.dumps(fresh,indent=2),encoding='utf-8')
