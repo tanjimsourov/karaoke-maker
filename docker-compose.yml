@@ -23,11 +23,21 @@ services:
         target: /media
         bind:
           create_host_path: false
-      - karaoke_models:/app/models
-      - karaoke_work:/app/work
-      - karaoke_exports:/app/out
-      - karaoke_reports:/app/reports
-      - karaoke_tmp:/app/tmp
+      - type: bind
+        source: ${KARAOKE_DATA_HOST_DIR:-./docker-data}/models
+        target: /app/models
+      - type: bind
+        source: ${KARAOKE_DATA_HOST_DIR:-./docker-data}/work
+        target: /app/work
+      - type: bind
+        source: ${KARAOKE_DATA_HOST_DIR:-./docker-data}/exports
+        target: /app/out
+      - type: bind
+        source: ${KARAOKE_DATA_HOST_DIR:-./docker-data}/reports
+        target: /app/reports
+      - type: bind
+        source: ${KARAOKE_DATA_HOST_DIR:-./docker-data}/tmp
+        target: /app/tmp
   karaoke:
     build: .
     image: smc-karaoke:local
@@ -81,14 +91,18 @@ services:
       - type: bind
         source: ${KARAOKE_MEDIA_HOST_DIR}/karaoke
         target: /media/karaoke
-      - karaoke_models:/app/models
-      - karaoke_work:/app/work
-      - karaoke_exports:/app/out
-      - karaoke_reports:/app/reports
-      - karaoke_tmp:/app/tmp
-volumes:
-  karaoke_models:
-  karaoke_work:
-  karaoke_exports:
-  karaoke_reports:
-  karaoke_tmp:
+      - type: bind
+        source: ${KARAOKE_DATA_HOST_DIR:-./docker-data}/models
+        target: /app/models
+      - type: bind
+        source: ${KARAOKE_DATA_HOST_DIR:-./docker-data}/work
+        target: /app/work
+      - type: bind
+        source: ${KARAOKE_DATA_HOST_DIR:-./docker-data}/exports
+        target: /app/out
+      - type: bind
+        source: ${KARAOKE_DATA_HOST_DIR:-./docker-data}/reports
+        target: /app/reports
+      - type: bind
+        source: ${KARAOKE_DATA_HOST_DIR:-./docker-data}/tmp
+        target: /app/tmp

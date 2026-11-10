@@ -4,7 +4,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg libsndfile1 libgomp1 libgl1 fonts-dejavu-core fonts-liberation \
     ca-certificates git build-essential && rm -rf /var/lib/apt/lists/*
-COPY requirements-zoom.txt requirements-demucs.txt requirements-separation-extra.txt setup.py .env.example ./
+COPY requirements-zoom.txt requirements-demucs.txt requirements-separation-extra.txt setup.py ./
 # Keep the existing two isolated Python environments; default to CPU wheels.
 RUN python setup.py --check && python -m venv .venv-zoom && python -m venv .venv-demucs \
     && .venv-zoom/bin/pip install --index-url https://download.pytorch.org/whl/cpu torch==2.8.0 torchaudio==2.8.0 \
@@ -15,6 +15,7 @@ RUN python setup.py --check && python -m venv .venv-zoom && python -m venv .venv
 # Store them in the image (outside writable model/work volumes and cleanup paths).
 ENV NLTK_DATA=/opt/nltk_data
 RUN .venv-zoom/bin/python -c "import nltk; nltk.download('punkt', download_dir='/opt/nltk_data', raise_on_error=True); nltk.download('punkt_tab', download_dir='/opt/nltk_data', raise_on_error=True); nltk.data.find('tokenizers/punkt_tab/english/')"
+COPY .env.example ./
 COPY karaoke.py ./
 COPY tools/ ./tools/
 COPY config/ ./config/

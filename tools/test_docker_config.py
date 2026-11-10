@@ -30,6 +30,17 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(init['user'],'0:0')
         self.assertEqual(runner['logging']['driver'],'none')
 
+    def test_runtime_storage_is_project_bind_mounts(self):
+        data=yaml.safe_load((ROOT/'docker-compose.yml').read_text())
+        self.assertNotIn('volumes',data)
+        for name in ('karaoke','karaoke-init'):
+            mounts={v['target']:v for v in data['services'][name]['volumes']}
+            for target in ('models','work','out','reports','tmp'):
+                mount=mounts['/app/'+target]
+                self.assertEqual(mount['type'],'bind')
+                self.assertTrue(mount['source'].startswith('${KARAOKE_DATA_HOST_DIR:-./docker-data}/'))
+        self.assertIn('/docker-data/',(ROOT/'.gitignore').read_text())
+
     def test_initial_source_and_branding(self):
         values={}
         for line in (ROOT/'.env').read_text().splitlines():

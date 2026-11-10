@@ -40,3 +40,6 @@ tools/ffmpeg/
 /*.jpeg
 !assets/**
 !audio-bg-sample/**
+
+/docker-data/
+.env.backup-*

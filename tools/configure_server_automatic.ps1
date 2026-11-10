@@ -4,6 +4,7 @@ $projectDirectory = Split-Path -Parent $PSScriptRoot
 $envPath = Join-Path $projectDirectory '.env'
 $settings = [ordered]@{
     KARAOKE_MEDIA_HOST_DIR = '"' + $MediaDirectory.Replace('\','/') + '"'
+    KARAOKE_DATA_HOST_DIR = './docker-data'
     KARAOKE_DOCKER_CPUS = '8'
     KARAOKE_DOCKER_MEMORY = '12g'
     KARAOKE_SERVER_WORKERS = '3'

@@ -23,3 +23,21 @@ The Docker VM must expose at least eight logical CPUs. Verify its capacity with 
 Restart after pulling the updated files: run `docker compose stop -t 120 karaoke`, then `powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\configure_server_automatic.ps1`, then `docker compose up --build --force-recreate`. Keep the same Compose project directory. Do not remove named volumes. Completed MP4s and models are preserved, but interrupted stages may repeat; changing threads or code can invalidate cached job identities, so this is not an exact in-place resume.
 
 Each completed song is published immediately after technical verification and checksum-confirmed copying; its dedicated work directory and temporary log/spec are then removed. Other running jobs and failed-job evidence are preserved. Small status receipts remain for retry/skip tracking. New server jobs preserve source average frame rate up to 30 fps (variable-rate sources become constant-rate), render 1920x1080 with 2 Mbps video and 192 kbps audio, and reduce bitrate further when required by a 90 MB planning budget. Publication rejects files of 100,000,000 bytes or larger. Output size depends on duration and content, not input file size.
+
+
+### Project-local runtime storage
+
+Runtime data now uses `./docker-data` bind mounts relative to the compose project:
+`models`, `work`, `exports`, `reports`, and `tmp`. On the server this is
+`D:\karaoke-tool\karaoke-maker\docker-data`. Git and build context exclude it.
+Published videos remain in the source folder's `karaoke` directory.
+
+To discard the legacy karaoke volumes (including model cache and unpublished
+exports), run `powershell -NoProfile -ExecutionPolicy Bypass -File
+.\tools\reset_server_storage.ps1 -DeleteOldProjectData` after pulling this code.
+The script validates the five exact legacy volume ownership labels and new bind
+mounts, stops only this compose project, then deletes those volumes without force.
+It does not remove shared images/build cache or shrink Rancher Desktop's VHDX.
+No `system prune`, WSL shutdown or other-service restart is performed. Rebuild
+and run normally afterwards. Models download afresh into the project directory.
+Windows bind-mount performance may differ from Linux named-volume performance.
