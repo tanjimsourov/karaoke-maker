@@ -41,3 +41,12 @@ It does not remove shared images/build cache or shrink Rancher Desktop's VHDX.
 No `system prune`, WSL shutdown or other-service restart is performed. Rebuild
 and run normally afterwards. Models download afresh into the project directory.
 Windows bind-mount performance may differ from Linux named-volume performance.
+
+### Skip previously completed songs
+The default batch retains existing completed outputs across code/config updates.
+It requires a successful completion receipt in `karaoke/.karaoke-status`, an
+unchanged source SHA-256 and a matching nonempty output MP4 SHA-256 inside the
+output tree. Older completed files over the new 100 MB cap are retained too;
+the cap applies to newly generated exports. Missing/corrupt outputs, changed
+sources and failed/running receipts are not treated as completed. Preserve the
+small status receipts. `--reprocess-completed` opts into applying changed recipes.

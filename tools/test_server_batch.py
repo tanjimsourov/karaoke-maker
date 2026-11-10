@@ -97,6 +97,23 @@ class ServerTests(unittest.TestCase):
             path.write_bytes(b'corrupt')
             self.assertFalse(server.receipt_matches(receipt,'source','recipe'))
 
+    def test_completed_export_survives_recipe_changes_and_legacy_size(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);path=root/'old.mp4'
+            with path.open('wb') as f:f.truncate(100000001)
+            receipt={'status':'draft_exported','source_sha256':'source','recipe_sha256':'old',
+                     'output':str(path),'output_sha256':server.sha(path)}
+            self.assertTrue(server.completed_output_matches(receipt,'source',root))
+            self.assertFalse(server.completed_output_matches(receipt,'changed-source',root))
+            self.assertFalse(server.completed_output_matches(receipt,'source',root,verified=True))
+            self.assertFalse(server.completed_output_matches(receipt,'source',root/'other'))
+            receipt['status']='running'
+            self.assertFalse(server.completed_output_matches(receipt,'source',root))
+            receipt['status']='draft_exported';path.write_bytes(b'corrupt')
+            self.assertFalse(server.completed_output_matches(receipt,'source',root))
+            path.unlink()
+            self.assertFalse(server.completed_output_matches(receipt,'source',root))
+
     def test_real_child_process_publish_and_resume(self):
         # Replace only the costly karaoke implementation, not the runner/subprocess/file operations.
         with tempfile.TemporaryDirectory() as d:
@@ -110,6 +127,7 @@ class ServerTests(unittest.TestCase):
             with patch.object(server,'ROOT',root),patch('workflow.normalize',return_value=({},root/'work/test-job')), \
                     patch('project_runtime.OUT',root/'out'):
                 self.assertEqual(server.run_one(source,media,media/'karaoke',root/'reports',args),'draft_exported')
+                (root/'tools/new_code.py').write_text('# changed code')
                 self.assertEqual(server.run_one(source,media,media/'karaoke',root/'reports',args),'skipped')
                 output=list((media/'karaoke').glob('*.mp4'))
                 self.assertEqual(len(output),1);self.assertEqual(output[0].read_bytes(),b'video')

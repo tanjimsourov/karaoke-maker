@@ -58,6 +58,20 @@ def receipt_matches(receipt, source_sha, recipe_sha):
     p=Path(receipt.get('output',''))
     return p.is_file() and p.stat().st_size<=99999999 and sha(p)==receipt.get('output_sha256')
 
+def completed_output_matches(receipt, source_sha, output_root, verified=False):
+    """Keep completed exports across code/config updates, including legacy sizes."""
+    statuses=('verified_exported',) if verified else ('draft_exported','verified_exported')
+    if receipt.get('status') not in statuses or receipt.get('source_sha256')!=source_sha:
+        return False
+    path=Path(receipt.get('output',''))
+    try:
+        if not path.resolve().is_relative_to(output_root.resolve()) or path.suffix.lower()!='.mp4':
+            return False
+        return path.is_file() and path.stat().st_size>0 and sha(path)==receipt.get('output_sha256')
+    except OSError:
+        return False
+
+
 def publish(source, destination):
     if source.stat().st_size>99999999:raise ValueError('Output exceeds 100 MB')
     destination.parent.mkdir(parents=True,exist_ok=True)
@@ -111,6 +125,9 @@ def run_one(source, root, output, report_dir, args):
     from project_runtime import LOGO
     recipe_sha=hashlib.sha256((json.dumps(job,sort_keys=True)+str(verified)+source_sha+code.hexdigest()+sha(LOGO)).encode()).hexdigest()
     old=json.loads(receipt_path.read_text()) if receipt_path.exists() else {}
+    if not getattr(args,'reprocess_completed',False) and completed_output_matches(old,source_sha,output,verified):
+        print('[SKIP COMPLETED]',source,'->',old['output'],flush=True)
+        return 'skipped'
     if receipt_matches(old,source_sha,recipe_sha) and (not verified or old.get('status')=='verified_exported'):
         print('[SKIP] Verified existing export:',source,flush=True);return 'skipped'
     if old.get('status') in ('failed','needs_review') and old.get('source_sha256')==source_sha \
@@ -277,6 +294,7 @@ def main():
     p.add_argument('--settle-seconds',type=float,default=float(os.getenv('KARAOKE_SETTLE_SECONDS','30')))
     p.add_argument('--parallel',action=argparse.BooleanOptionalAction,default=os.getenv('KARAOKE_SERVER_PARALLEL','1')=='1')
     p.add_argument('--dry-run',action='store_true')
+    p.add_argument('--reprocess-completed',action='store_true',help='Apply changed code/settings to completed songs instead of keeping existing outputs')
     p.add_argument('--retry-failed',action=argparse.BooleanOptionalAction,default=True)
     p.add_argument('--attempts',type=int,default=int(os.getenv('KARAOKE_SERVER_ATTEMPTS','2')))
     p.add_argument('--limit',type=int,default=0)
