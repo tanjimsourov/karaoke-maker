@@ -9,6 +9,38 @@ from unittest.mock import patch
 import server_batch as server
 
 class ServerTests(unittest.TestCase):
+    def test_multiple_roots_discovered_without_outputs_and_no_conversion(self):
+        import contextlib
+        import io
+        with tempfile.TemporaryDirectory() as d:
+            roots=[Path(d)/name for name in ('current','mellow','db')]
+            for root in roots:
+                (root/'nested').mkdir(parents=True)
+                (root/'nested/song.mp4').write_bytes(b'input')
+                (root/'karaoke').mkdir()
+                (root/'karaoke/result.mp4').write_bytes(b'output')
+            output=io.StringIO()
+            with patch.dict(os.environ,{'KARAOKE_EXTRA_INPUT_DIRS':json.dumps([str(r) for r in roots[1:]])}), \
+                 patch('sys.argv',['server_batch.py','--input-dir',str(roots[0]),'--output-dir',str(roots[0]/'karaoke'),'--settle-seconds','0','--dry-run']), \
+                 contextlib.redirect_stdout(output):
+                self.assertEqual(server.main(),0)
+            plan=json.loads(output.getvalue())
+            self.assertEqual(len(plan['inputs']),3)
+            self.assertEqual(set(plan['files']),{str(r/'nested/song.mp4') for r in roots})
+
+    def test_failed_child_scratch_and_logs_removed_immediately(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);(root/'tools').mkdir();media=root/'media';media.mkdir()
+            source=media/'bad.mp4';source.write_bytes(b'input')
+            (root/'karaoke.py').write_text("import os,pathlib\np=pathlib.Path(os.environ['TMPDIR']);(p/'large-scratch').write_bytes(b'junk');print('failure details');raise SystemExit(1)\n")
+            args=argparse.Namespace(language='da',model='htdemucs',threads=2,retry_failed=True,parallel=False,cleanup_song=True)
+            with patch.object(server,'ROOT',root),patch('workflow.normalize',return_value=({},root/'work/test-job')):
+                self.assertEqual(server.run_one(source,media,media/'karaoke',root/'reports',args),'failed')
+            self.assertEqual(list((root/'work/server-jobs').iterdir()),[])
+            self.assertFalse(list((root/'reports').glob('*.log')))
+            self.assertFalse(list((root/'reports').glob('*.job.json')))
+            self.assertEqual(source.read_bytes(),b'input')
+
     def test_six_workers_fill_and_drain_queue(self):
         import threading
         barrier=threading.Barrier(6);lock=threading.Lock()
@@ -121,12 +153,12 @@ class ServerTests(unittest.TestCase):
             source=media/'Artist - Song.mp4';source.write_bytes(b'input')
             (root/'karaoke.py').write_text(
                 "import os,pathlib\np=pathlib.Path(os.environ['KARAOKE_OUTPUT_DIR']);"
-                "p.mkdir(parents=True,exist_ok=True);(p/'test-job_DRAFT.mp4').write_bytes(b'video');"
+                "p.mkdir(parents=True,exist_ok=True);(p/'test-job_Karaoke.mp4').write_bytes(b'video');"
                 "print('[DONE] fixture')\n")
             args=argparse.Namespace(language='da',model='htdemucs',threads=2,retry_failed=False,parallel=True,cleanup_song=False)
             with patch.object(server,'ROOT',root),patch('workflow.normalize',return_value=({},root/'work/test-job')), \
                     patch('project_runtime.OUT',root/'out'):
-                self.assertEqual(server.run_one(source,media,media/'karaoke',root/'reports',args),'draft_exported')
+                self.assertEqual(server.run_one(source,media,media/'karaoke',root/'reports',args),'exported')
                 (root/'tools/new_code.py').write_text('# changed code')
                 self.assertEqual(server.run_one(source,media,media/'karaoke',root/'reports',args),'skipped')
                 output=list((media/'karaoke').glob('*.mp4'))
@@ -140,7 +172,7 @@ class ServerTests(unittest.TestCase):
             (root/'karaoke.py').write_text("""import os,pathlib,json,time
 p=pathlib.Path(os.environ['KARAOKE_OUTPUT_DIR'])
 p.mkdir(parents=True,exist_ok=True)
-a=p/'test-job_DRAFT.mp4';a.write_bytes(b'video')
+a=p/'test-job_Karaoke.mp4';a.write_bytes(b'video')
 print('[EXPORT_READY] '+json.dumps({'path':str(a)}),flush=True)
 out=pathlib.Path(__file__).parent/'media/karaoke'
 for _ in range(100):
@@ -151,7 +183,7 @@ else:raise RuntimeError('Publication waited for child exit')
 """)
             args=argparse.Namespace(language='da',model='htdemucs',threads=2,retry_failed=True,parallel=False,cleanup_song=True)
             with patch.object(server,'ROOT',root),patch('workflow.normalize',return_value=({},root/'work/test-job')):
-                self.assertEqual(server.run_one(source,media,media/'karaoke',root/'reports',args),'draft_exported')
+                self.assertEqual(server.run_one(source,media,media/'karaoke',root/'reports',args),'exported')
             self.assertTrue((root/'observed').exists())
             self.assertEqual(source.read_bytes(),b'input')
             self.assertFalse(list((root/'reports').glob('*.log')))
@@ -164,7 +196,7 @@ else:raise RuntimeError('Publication waited for child exit')
             (root/'karaoke.py').write_text('raise SystemExit(2)\n')
             args=argparse.Namespace(language='da',model='htdemucs',threads=2,retry_failed=False,parallel=False,cleanup_song=False)
             with patch.object(server,'ROOT',root),patch('workflow.normalize',return_value=({},root/'work/test-job')):
-                self.assertEqual(server.run_one(source,media,media/'karaoke',root/'reports',args),'needs_review')
+                self.assertEqual(server.run_one(source,media,media/'karaoke',root/'reports',args),'skipped_invalid')
                 self.assertFalse((media/'karaoke').exists())
 
     def test_verified_delivery_withholds_unreviewed_child_output(self):
@@ -178,7 +210,7 @@ else:raise RuntimeError('Publication waited for child exit')
             with patch.object(server,'ROOT',root),patch('workflow.normalize',return_value=({},root/'work/test-job')):
                 self.assertEqual(server.run_one(source,media,media/'karaoke',root/'reports',args),'needs_review')
             self.assertFalse(list((media/'karaoke').glob('*.mp4')))
-            self.assertTrue(list((root/'work/server-jobs').glob('*/exports/*_DRAFT.mp4')))
+            self.assertFalse(list((root/'work/server-jobs').glob('*/exports/*_DRAFT.mp4')))
             records=[json.loads(f.read_text()) for f in (root/'reports').glob('*.json') if not f.name.endswith('.job.json')]
             self.assertFalse(records[0]['reviewed'])
 
@@ -187,7 +219,7 @@ else:raise RuntimeError('Publication waited for child exit')
             root=Path(d);(root/'tools').mkdir();media=root/'media';media.mkdir()
             source=media/'Artist - Song.mp4';source.write_bytes(b'input')
             identity=server.hashlib.sha256(source.name.encode()).hexdigest()[:20]
-            job=root/'work/server-jobs'/identity/'jobs/test-job';job.mkdir(parents=True)
+            job=root/'work/server-jobs'/(server.hashlib.sha256(str(media.resolve()).encode()).hexdigest()[:8]+'-'+identity)/'jobs/test-job';job.mkdir(parents=True)
             (job/'full-review.json').write_text('{}')
             for name in ['delivery-review.json','delivery-verification.json']:(job/name).write_text('{}')
             (root/'karaoke.py').write_text(

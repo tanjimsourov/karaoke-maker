@@ -9,6 +9,18 @@ from container_init import initialize
 ROOT=Path(__file__).resolve().parents[1]
 
 class DeploymentTests(unittest.TestCase):
+    def test_three_source_roots_each_have_separate_writable_output(self):
+        data=yaml.safe_load((ROOT/'docker-compose.yml').read_text())
+        runner=data['services']['karaoke']
+        mounts={v['target']:v for v in runner['volumes']}
+        for target in ('/media','/media-mellow','/media-db'):
+            self.assertTrue(mounts[target]['read_only'])
+            self.assertFalse(mounts[target]['bind']['create_host_path'])
+            self.assertIn(target+'/karaoke',mounts)
+            self.assertFalse(mounts[target+'/karaoke'].get('read_only',False))
+        import json
+        self.assertEqual(json.loads(runner['environment']['KARAOKE_EXTRA_INPUT_DIRS']),['/media-mellow','/media-db'])
+
     def test_init_preserves_source_and_creates_only_output(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);media=root/'media';media.mkdir();app=root/'app';app.mkdir()

@@ -33,6 +33,7 @@ parser.add_argument('--branding-plan', type=Path)
 parser.add_argument("--output-name")
 parser.add_argument("--output-dir", type=Path)
 parser.add_argument("--source-ass", type=Path, help="Reviewed local word-timed ASS")
+parser.add_argument('--ass-only', action='store_true', help='Write the same styled timed ASS without encoding a background video')
 parser.add_argument("--audio-file", type=Path, help="Existing backing audio; no separation")
 parser.add_argument("--language-label", default="DANSK KARAOKE")
 parser.add_argument("--approved-intro", action="store_true")
@@ -472,6 +473,9 @@ for item in LAYERS["texts"]:
     events += layer_tools.text_events(item, INTRO_DELAY, SX, SY, FS, ass_time, ass_colour,
                                       cues[-1][1] - INTRO_DELAY + 5)
 output_ass.write_text(HEADER + "\n".join(events) + "\n", encoding="utf-8-sig")
+if args.ass_only:
+    print('ASS ASSET:', output_ass, flush=True)
+    raise SystemExit(0)
 
 background_index = args.background % max(1, len(BACKGROUNDS))
 background = BACKGROUNDS[background_index] if BACKGROUNDS else None

@@ -357,9 +357,11 @@ def loudness_gain(path, target_lufs, ceiling_db=-1.0):
     return min(target_lufs - loudness, ceiling_db - peak_db)
 
 
-def run_renderer(cfg, work, destination, output_name):
+def run_renderer(cfg, work, destination, output_name, ass_only=False):
     """Render work/lyrics.ass with the song's options; returns the options used."""
     options, render_args = render_options(cfg)
+    if ass_only:
+        render_args.append('--ass-only')
     if cfg.get('branding_plan'):
         plan=cfg['branding_plan']
         if digest(plan['file'])!=plan['sha256']:raise ValueError('Branding plan changed')

@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import sys
 import time
-from collections import Counter
+from collections import Counter, deque
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,14 +53,14 @@ def make_job(source, language, model, threads):
                   'countdown_colour':os.getenv('KARAOKE_COUNTDOWN_COLOUR','#BB3794')},**overrides}
 
 def receipt_matches(receipt, source_sha, recipe_sha):
-    if receipt.get('status') not in ('draft_exported','verified_exported') or receipt.get('source_sha256')!=source_sha \
+    if receipt.get('status') not in ('exported','draft_exported','verified_exported') or receipt.get('source_sha256')!=source_sha \
             or receipt.get('recipe_sha256')!=recipe_sha:return False
     p=Path(receipt.get('output',''))
     return p.is_file() and p.stat().st_size<=99999999 and sha(p)==receipt.get('output_sha256')
 
 def completed_output_matches(receipt, source_sha, output_root, verified=False):
     """Keep completed exports across code/config updates, including legacy sizes."""
-    statuses=('verified_exported',) if verified else ('draft_exported','verified_exported')
+    statuses=('verified_exported',) if verified else ('exported','draft_exported','verified_exported')
     if receipt.get('status') not in statuses or receipt.get('source_sha256')!=source_sha:
         return False
     path=Path(receipt.get('output',''))
@@ -143,7 +143,7 @@ def run_one(source, root, output, report_dir, args):
     record={'source':str(source),'source_sha256':source_sha,'recipe_sha256':recipe_sha,
             'output':str(destination),'status':'running','started':time.time()}
     write_json(receipt_path,record)
-    runtime=ROOT/'work/server-jobs'/identity
+    runtime=ROOT/'work/server-jobs'/(hashlib.sha256(str(root.resolve()).encode()).hexdigest()[:8]+'-'+identity)
     try:
         from workflow import normalize
         from project_runtime import OUT
@@ -155,11 +155,10 @@ def run_one(source, root, output, report_dir, args):
         reviewed=verified and (job_folder/'full-review.json').exists()
         command=[sys.executable,'-u',str(ROOT/'karaoke.py'),'render' if reviewed else 'run','--job',str(spec),'--keep-work']
         if not reviewed:
-            command.append('--draft-export')
+            command.append('--draft-export' if verified else '--automatic-export')
             if verified:command.append('--verify-output')
         if args.parallel:command.append('--parallel-stages')
         print('[PROCESS]',source,flush=True)
-        log=report_dir/(identity+'.log')
         def complete_export():
             if before!=(source.stat().st_size,source.stat().st_mtime_ns) or sha(source)!=source_sha:
                 raise ValueError('Input changed during processing; output not published')
@@ -169,58 +168,57 @@ def run_one(source, root, output, report_dir, args):
                               reason='Resolve lyric/timing/audio issues and approve the complete video before publication')
                 print('[NEEDS REVIEW] Final withheld:',source,'Report:',record['review_report'],flush=True)
                 return 'needs_review'
-            artifact=export_dir/(folder.name+('_Karaoke.mp4' if verified else '_DRAFT.mp4'))
+            artifact=export_dir/(folder.name+('_DRAFT.mp4' if verified and not reviewed else '_Karaoke.mp4'))
             if verified:
                 record['delivery_review']=json.loads((job_folder/'delivery-review.json').read_text(encoding='utf-8'))
                 record['verification']=json.loads((job_folder/'delivery-verification.json').read_text(encoding='utf-8'))
             publish(artifact,destination)
-            status='verified_exported' if verified else 'draft_exported'
+            status='verified_exported' if verified else 'exported'
             record.update(status=status,bytes=destination.stat().st_size,
-                          output_sha256=sha(destination),reviewed=verified,log=str(log))
+                          output_sha256=sha(destination),reviewed=verified)
             print('[VERIFIED EXPORTED]' if verified else '[AUTOMATIC EXPORTED]',destination,flush=True)
             record['published_at']=time.time()
             write_json(receipt_path,record)
             return status
-        # Stream all progress to docker logs and retain it for diagnosis.
-        with log.open('a',encoding='utf-8') as handle:
-            process=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
-                                     text=True,encoding='utf-8',errors='replace',bufsize=1,
-                                     env={**os.environ,'KARAOKE_OUTPUT_DIR':str(export_dir),
-                                          'KARAOKE_WORK_DIR':str(runtime/'jobs'),
-                                          'KARAOKE_RENDER_WORK_DIR':str(runtime/'render'),
-                                          'KARAOKE_CLEANUP_AFTER_SONG':'0',
-                                          'KARAOKE_SERVER_CONCURRENT':'1',
-                                          'TMPDIR':str(runtime/'tmp'),'TEMP':str(runtime/'tmp'),
-                                          'TMP':str(runtime/'tmp')})
-            try:
-                for line in process.stdout:
-                    print(line,end='',flush=True);handle.write(line);handle.flush()
-                    if line.startswith('[EXPORT_READY] ') and (not verified or reviewed):
-                        expected=export_dir/(folder.name+('_Karaoke.mp4' if verified else '_DRAFT.mp4'))
-                        ready=Path(json.loads(line[len('[EXPORT_READY] '):])['path'])
-                        if ready.resolve()!=expected.resolve():raise ValueError('Unexpected export-ready path')
-                        complete_export()
-                        # The event is emitted after all worker file writes and locks finish.
-                        if getattr(args,'cleanup_song',True):
-                            from song_cleanup import remove_generated
-                            if sha(destination)!=record['output_sha256']:raise ValueError('Published checksum changed')
-                            remove_generated(runtime,ROOT/'work/server-jobs',[source,destination])
-                            spec.unlink(missing_ok=True)
-                            handle.seek(0);handle.truncate();handle.flush()
-                            print('[CLEANUP] Published song work removed:',source.name,flush=True)
-                code=process.wait()
-            except BaseException:
-                process.terminate();process.wait();raise
-            finally:
-                process.stdout.close()
-        if code and record['status'] in ('draft_exported','verified_exported'):
+        # Console only. Keep a bounded error tail in memory, never a disk log.
+        tail=deque(maxlen=80)
+        process=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+                                 text=True,encoding='utf-8',errors='replace',bufsize=1,
+                                 env={**os.environ,'KARAOKE_OUTPUT_DIR':str(export_dir),
+                                      'KARAOKE_WORK_DIR':str(runtime/'jobs'),
+                                      'KARAOKE_RENDER_WORK_DIR':str(runtime/'render'),
+                                      'KARAOKE_CLEANUP_AFTER_SONG':'0',
+                                      'KARAOKE_SERVER_CONCURRENT':'1',
+                                      'TMPDIR':str(runtime/'tmp'),'TEMP':str(runtime/'tmp'),
+                                      'TMP':str(runtime/'tmp')})
+        try:
+            for line in process.stdout:
+                print(line,end='',flush=True);tail.append(line)
+                if line.startswith('[EXPORT_READY] ') and (not verified or reviewed):
+                    expected=export_dir/(folder.name+('_DRAFT.mp4' if verified and not reviewed else '_Karaoke.mp4'))
+                    ready=Path(json.loads(line[len('[EXPORT_READY] '):])['path'])
+                    if ready.resolve()!=expected.resolve():raise ValueError('Unexpected export-ready path')
+                    complete_export()
+                    # The event is emitted after all worker file writes and locks finish.
+                    if getattr(args,'cleanup_song',True):
+                        from song_cleanup import remove_generated
+                        if sha(destination)!=record['output_sha256']:raise ValueError('Published checksum changed')
+                        remove_generated(runtime,ROOT/'work/server-jobs',[source,destination])
+                        spec.unlink(missing_ok=True)
+                        print('[CLEANUP] Published song work removed:',source.name,flush=True)
+            code=process.wait()
+        except BaseException:
+            process.terminate();process.wait();raise
+        finally:
+            process.stdout.close()
+        if code and record['status'] in ('exported','draft_exported','verified_exported'):
             record['shutdown_exit_code']=code
             return record['status']
         if code:
-            record.update(status='needs_review' if code==2 else 'failed',exit_code=code,log=str(log),
-                          error_tail=log.read_text(encoding='utf-8',errors='replace')[-16000:])
+            record.update(status=('needs_review' if verified else 'skipped_invalid') if code==2 else 'failed',exit_code=code)
+            print('[SOURCE NOT EXPORTED]',source,''.join(tail)[-4000:],flush=True)
             return record['status']
-        if record['status'] in ('draft_exported','verified_exported'):
+        if record['status'] in ('exported','draft_exported','verified_exported'):
             return record['status']
         return complete_export()
     except Exception as exc:
@@ -228,18 +226,15 @@ def run_one(source, root, output, report_dir, args):
         return 'failed'
     finally:
         record['finished']=time.time();write_json(receipt_path,record)
-        if record['status'] in ('failed','needs_review'):
-            failure_log=report_dir/(identity+'.log')
-            if failure_log.exists():
-                tail=failure_log.read_text(encoding='utf-8',errors='replace')[-16000:]
-                failure_log.write_text(tail,encoding='utf-8')
-        if record['status'] in ('draft_exported','verified_exported') and getattr(args,'cleanup_song',True):
+        if getattr(args,'cleanup_song',True):
             from song_cleanup import remove_generated
-            if sha(destination)!=record['output_sha256']:raise ValueError('Published file changed before cleanup')
+            if record['status'] in ('exported','draft_exported','verified_exported'):
+                if sha(destination)!=record['output_sha256']:raise ValueError('Published file changed before cleanup')
             remove_generated(runtime,ROOT/'work/server-jobs',[source,destination])
             for path in (report_dir/(identity+'.job.json'),report_dir/(identity+'.log')):
                 path.unlink(missing_ok=True)
-            print('[CLEANUP] Completed song temporary files/log removed:',source.name,flush=True)
+            print('[CLEANUP] Song temporary data removed:',source.name,flush=True)
+
 
 
 def run_with_retries(source, root, output, report_dir, args):
@@ -287,6 +282,7 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--input-dir',type=Path,default=Path(os.getenv('KARAOKE_INPUT_DIR','/media')))
     p.add_argument('--output-dir',type=Path,default=None)
+    p.add_argument('--extra-input-dir',type=Path,action='append',default=[])
     p.add_argument('--language',default=os.getenv('KARAOKE_LANGUAGE','auto'))
     p.add_argument('--model',choices=['htdemucs','htdemucs_ft'],default=os.getenv('KARAOKE_SERVER_MODEL','htdemucs'))
     p.add_argument('--delivery-mode',choices=['automatic','verified','samples'],default=os.getenv('KARAOKE_DELIVERY_MODE','automatic'))
@@ -306,11 +302,23 @@ def main():
     if not root.is_dir():p.error('Input directory does not exist: '+str(root))
     if output==root or not output.is_relative_to(root):p.error('Output must be a subfolder of the input root')
     if not 1<=args.workers<=6 or not 1<=args.threads<=8 or not 1<=args.attempts<=3 or args.settle_seconds<0 or args.limit<0:p.error('Invalid worker/thread/attempt/settle/limit setting')
-    files=list(discover(root,output,args.settle_seconds))
-    if args.limit:files=files[:args.limit]
+    extra=json.loads(os.getenv('KARAOKE_EXTRA_INPUT_DIRS','[]'))
+    if not isinstance(extra,list) or any(not isinstance(v,str) or not v for v in extra):p.error('KARAOKE_EXTRA_INPUT_DIRS must be a JSON list of paths')
+    roots=[root]+[Path(v).resolve() for v in [*extra,*args.extra_input_dir]]
+    if len(set(roots))!=len(roots):p.error('Duplicate input directories')
+    if any(a!=b and a.is_relative_to(b) for a in roots for b in roots):p.error('Input directories must not overlap')
+    for directory in roots:
+        if not directory.is_dir():p.error('Input directory does not exist: '+str(directory))
+    tasks=[]
+    for directory in roots:
+        destination=output if directory==root else directory/'karaoke'
+        tasks.extend((source,directory,destination,destination/'.karaoke-status')
+                     for source in discover(directory,destination,args.settle_seconds))
+    if args.limit:tasks=tasks[:args.limit]
+    files=[task[0] for task in tasks]
     if args.dry_run:
-        print(json.dumps({'input':str(root),'output':str(output),'files':[str(f) for f in files],
-                          'mode':'unreviewed drafts','max_bytes':99999999},indent=2));return 0
+        print(json.dumps({'inputs':[str(v) for v in roots],'output':str(output),'files':[str(f) for f in files],
+                          'mode':args.delivery_mode,'max_bytes':99999999},indent=2));return 0
     output.mkdir(parents=True,exist_ok=True)
     report_dir=output/'.karaoke-status';report_dir.mkdir(parents=True,exist_ok=True)
     from model_queue import model_slot
@@ -321,18 +329,21 @@ def main():
     statuses=[]
     with model_slot(ROOT,timeout=0,name='server-batch'):
         try:
-            results=run_queue(files,lambda source:run_with_retries(source,root,output,report_dir,args),args.workers)
+            if cleanup:
+                cleanup_runtime(ROOT)
+            for directory in roots:
+                status_dir=(output if directory==root else directory/'karaoke')/'.karaoke-status'
+                status_dir.mkdir(parents=True,exist_ok=True)
+                for pattern in ('*.log','*.job.json','batch-summary.json'):
+                    for old in status_dir.glob(pattern):old.unlink()
+            results=run_queue(tasks,lambda task:run_with_retries(*task,args),args.workers)
             statuses=[r['status'] if isinstance(r,dict) else r for r in results]
             counts=dict(Counter(statuses))
-            write_json(report_dir/'batch-summary.json',{'finished':time.time(),'total':len(files),
-                'counts':counts,'songs':results})
-            print('[BATCH FINISHED]',json.dumps({'total':len(files),'counts':counts,'report':str(report_dir/'batch-summary.json')}),flush=True)
+            print('[BATCH FINISHED]',json.dumps({'total':len(files),'counts':counts}),flush=True)
         finally:
-            if cleanup and statuses and all(s in ('verified_exported','draft_exported','skipped') for s in statuses):
+            if cleanup:
                 cleanup_runtime(ROOT)
                 print('[CLEANUP] Work, staging exports, reports and temporary files removed. Sources, models and published MP4s preserved.',flush=True)
-            elif cleanup:
-                print('[CLEANUP] Unfinished/review data retained for correction; completed-song work was cleaned individually.',flush=True)
     return 2 if any(s in ('failed','needs_review') for s in statuses) else 0
 
 if __name__=='__main__':raise SystemExit(main())

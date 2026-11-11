@@ -389,7 +389,7 @@ def execute(stage, job, folder, args):
                 from output_size import MAX_BYTES
                 if source.stat().st_size > MAX_BYTES:
                     raise ValueError('Draft exceeds 100 MB; refusing delivery')
-                destination = OUT/(cfg['slug']+'_DRAFT.mp4')
+                destination = OUT/(cfg['slug']+('_Karaoke.mp4' if getattr(args,'automatic_export',False) else '_DRAFT.mp4'))
                 OUT.mkdir(parents=True, exist_ok=True)
                 if destination.exists():
                     if digest(destination) != digest(source):
@@ -485,6 +485,7 @@ def main():
     p.add_argument('--warm-models',action='store_true',help='Reuse bounded resident models across manifest jobs')
     p.add_argument('--parallel-stages',action='store_true',help='Overlap isolated background preparation with audio stages; dependencies and reviews remain enforced')
     p.add_argument('--draft-export',action='store_true',help='run only: export an unreviewed DRAFT MP4 without recording lyric approval')
+    p.add_argument('--automatic-export',action='store_true',help='run only: export the completed automatic MP4 without a manual approval gate')
     p.add_argument('--verify-output',action='store_true',help='Build source-comparison and delivery review evidence after rendering')
     p.add_argument('--verification-decisions',type=Path,help='Completed per-issue review decisions for approve')
     p.add_argument('--preview-start',type=float,default=0,help='quick-preview: output timeline start, including intro')
@@ -494,6 +495,9 @@ def main():
     p.add_argument('--apply',action='store_true',help='cleanup only: delete the validated job data; otherwise dry run')
     p.add_argument('--keep-work',action='store_true',help='Keep temporary job data after final delivery')
     a, remaining = p.parse_known_args()
+    if a.automatic_export:
+        if a.stage!='run' or a.draft_export:p.error('--automatic-export requires run and cannot be combined with --draft-export')
+        a.draft_export=True  # Same processing/checks; does not fabricate manual approval.
     if a.draft_export and a.stage != 'run': p.error('--draft-export is only valid with run')
     if a.warm_models:os.environ['KARAOKE_KEEP_MODELS']='1'
     if a.apply and a.stage != 'cleanup': p.error('--apply is only valid for cleanup')
@@ -528,17 +532,18 @@ def main():
             execute(a.stage,job,folder,a)
             state={'run':'preview_ready_needs_review','preview':'preview_ready_needs_review',
                    'approve':'reviewed','render':'delivered'}.get(a.stage,'completed')
+            if a.automatic_export:state='automatic_exported'
             if a.stage!='status': save(folder/'state.json',{'stage':a.stage,'status':state,'at':time.time()})
             if a.draft_export and not a.keep_work and os.getenv('KARAOKE_CLEANUP_AFTER_SONG','1')=='1':
                 from song_cleanup import local_export
-                local_export(folder,OUT/(folder.name+'_DRAFT.mp4'))
+                local_export(folder,OUT/(folder.name+('_Karaoke.mp4' if a.automatic_export else '_DRAFT.mp4')))
             if a.stage == 'render' and not a.keep_work:
                 from cleanup_job import plan_cleanup,cleanup
                 cleanup(plan_cleanup(folder))
                 print('Generated job data removed; verification receipts retained in reports/completed.',flush=True)
             results.append({'title':job['title'],'status':'completed','work':str(folder)})
             if os.getenv('KARAOKE_SERVER_CONCURRENT')=='1' and (a.draft_export or a.stage=='render'):
-                artifact=OUT/(folder.name+('_DRAFT.mp4' if a.draft_export else '_Karaoke.mp4'))
+                artifact=OUT/(folder.name+('_DRAFT.mp4' if a.draft_export and not a.automatic_export else '_Karaoke.mp4'))
                 print('[EXPORT_READY] '+json.dumps({'path':str(artifact)}),flush=True)
         except Exception as exc:
             status='needs_review' if isinstance(exc,ReviewRequired) else 'failed'

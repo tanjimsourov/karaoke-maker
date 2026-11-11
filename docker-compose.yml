@@ -15,12 +15,23 @@ services:
     environment:
       KARAOKE_UID: "${KARAOKE_UID:-10001}"
       KARAOKE_GID: "${KARAOKE_GID:-10001}"
+      KARAOKE_EXTRA_INPUT_DIRS: '["/media-mellow","/media-db"]'
     logging:
       driver: "none"
     volumes:
       - type: bind
         source: ${KARAOKE_MEDIA_HOST_DIR:?Set KARAOKE_MEDIA_HOST_DIR in .env}
         target: /media
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${KARAOKE_MELLOW_HOST_DIR:?Set KARAOKE_MELLOW_HOST_DIR in .env}
+        target: /media-mellow
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${KARAOKE_DB_HOST_DIR:?Set KARAOKE_DB_HOST_DIR in .env}
+        target: /media-db
         bind:
           create_host_path: false
       - type: bind
@@ -61,6 +72,7 @@ services:
       driver: "none"
     environment:
       KARAOKE_INPUT_DIR: /media
+      KARAOKE_EXTRA_INPUT_DIRS: '["/media-mellow","/media-db"]'
       KARAOKE_SERVER_OUTPUT_DIR: /media/karaoke
       KARAOKE_LANGUAGE: "${KARAOKE_LANGUAGE:-auto}"
       KARAOKE_SERVER_MODEL: "${KARAOKE_SERVER_MODEL:-htdemucs}"
@@ -91,6 +103,24 @@ services:
       - type: bind
         source: ${KARAOKE_MEDIA_HOST_DIR}/karaoke
         target: /media/karaoke
+      - type: bind
+        source: ${KARAOKE_MELLOW_HOST_DIR:?Set KARAOKE_MELLOW_HOST_DIR in .env}
+        target: /media-mellow
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${KARAOKE_DB_HOST_DIR:?Set KARAOKE_DB_HOST_DIR in .env}
+        target: /media-db
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${KARAOKE_MELLOW_HOST_DIR}/karaoke
+        target: /media-mellow/karaoke
+      - type: bind
+        source: ${KARAOKE_DB_HOST_DIR}/karaoke
+        target: /media-db/karaoke
       - type: bind
         source: ${KARAOKE_DATA_HOST_DIR:-./docker-data}/models
         target: /app/models
