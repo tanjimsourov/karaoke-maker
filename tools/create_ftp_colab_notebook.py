@@ -39,13 +39,13 @@ subprocess.run([sys.executable,str(PROJECT/'tools/cloud_ftp_workspace.py'),'setu
 CONFIG = PROJECT/'config/ftp-mp3-danish.json'
 settings=json.loads(CONFIG.read_text())
 # Change these settings when selecting another FTP folder/background.
-settings.update(input_folder='/LH MP3 (actual situation in pre-defined)/Denmark Charts 2026', background='assets/audio-bg/6.jpeg',
+settings.update(input_folder='/LH MP3 (actual situation in pre-defined)/Denmark Charts 2026', background_folder='assets/audio-bg',
                 language='da', output_layout='beside-source', limit=0)
 # limit=3 processes three not-yet-completed songs; limit=0 processes the whole folder.
 CONFIG = PROJECT/'tmp/my-ftp-mp3-settings.json'
 CONFIG.write_text(json.dumps(settings,indent=2))
 print('Source:',settings['input_folder'])
-print('Background:',settings['background'])
+print('Background pool:',settings['background_folder'])
 print('Output: karaoke subfolder beside each MP3')
 ''')
     code('''from google.colab import userdata

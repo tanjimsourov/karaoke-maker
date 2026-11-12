@@ -1,6 +1,7 @@
 """Sequential FTP/explicit-FTPS -> existing converter -> FTP batch for GPU hosts."""
 import argparse
 from contextlib import contextmanager
+from concurrent.futures import ThreadPoolExecutor
 import ftplib
 import hashlib
 import io
@@ -12,6 +13,8 @@ import ssl
 import subprocess
 import sys
 import time
+import threading
+import random
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -151,6 +154,25 @@ def file_sha(path):
     return h.hexdigest()
 
 
+def select_background(config):
+    folder=config.get('background_folder')
+    if not folder:return config.get('background','assets/audio-bg/6.jpeg')
+    from PIL import Image
+    directory=Path(folder)
+    if not directory.is_absolute():directory=ROOT/directory
+    candidates=[]
+    for path in sorted(directory.iterdir()):
+        if path.suffix.lower() not in ('.jpg','.jpeg','.png'):continue
+        try:
+            with Image.open(path) as image:
+                w,h=image.size
+                if w>=1280 and h>=720 and abs(w/h-16/9)<=.025:
+                    candidates.append(path)
+        except OSError:continue
+    if not candidates:raise ValueError('No uncropped HD 16:9 backgrounds in '+str(directory))
+    return str(random.SystemRandom().choice(candidates).resolve())
+
+
 def discover(remote, folder, output, recursive, extensions=None):
     extensions=extensions or ['.mp4']
     for name, facts in sorted(remote.list(folder)):
@@ -169,7 +191,7 @@ def convert(source, config):
     output = source.parent / 'exports'
     artist, separator, title=source.stem.partition(' - ')
     if not separator:artist,title='Unknown Artist',source.stem
-    background=config.get('background','assets/audio-bg/6.jpeg') if source.suffix.lower()=='.mp3' else config.get('video_background','original')
+    background=select_background(config) if source.suffix.lower()=='.mp3' else config.get('video_background','original')
     if background!='original':
         image=Path(background)
         background=str((image if image.is_absolute() else ROOT/image).resolve())
@@ -178,9 +200,10 @@ def convert(source, config):
          'language':config.get('language','da'),'mode':'music','background':background,'profile':'optimized',
          'separation':{'model':config.get('model','htdemucs'),'overlap':.25},
          'audio_quality':{'threads':int(config.get('threads',2)),'alternatives':[]},
-         'render':{'canvas':'1920x1080','fps':25,'intro_seconds':10,'intro_countdown':True,
-                   'highlight_colour':config.get('highlight_colour','#00AEEF'),
-                   'countdown_style':config.get('countdown_style','circle'),
+         'render':{'canvas':'1920x1080','fps':config.get('fps',30),'intro_seconds':10,'intro_countdown':True,
+                   'preset':'veryfast',
+                   'highlight_colour':config.get('highlight_colour','#FFA500'),
+                   'countdown_style':config.get('countdown_style','arc'),
                    'countdown_colour':config.get('countdown_colour','#BB3794')}}
     spec=source.parent/'job.json';spec.write_text(json.dumps(job),encoding='utf-8')
     scratch=source.parent/'generated';scratch.mkdir(exist_ok=True)
@@ -189,7 +212,8 @@ def convert(source, config):
          'KARAOKE_RENDER_WORK_DIR':str(scratch/'render'),'TMPDIR':str(scratch/'tmp'),
          'TMP':str(scratch/'tmp'),'TEMP':str(scratch/'tmp'),
          'KARAOKE_EXTRA_INPUT_DIRS':'[]','KARAOKE_CLEANUP_AFTER_SONG':'0',
-         'KARAOKE_SERVER_CONCURRENT':'1'}
+         'KARAOKE_SERVER_CONCURRENT':'1','KARAOKE_STILL_FIT':'contain',
+         'KARAOKE_CLOUD_GPU_SLOTS':str(config.get('gpu_slots',1))}
     command=[sys.executable,'-u',str(ROOT/'karaoke.py'),'run','--job',str(spec),
              '--automatic-export','--keep-work','--parallel-stages']
     subprocess.run(command,cwd=ROOT,env=env,check=True)
@@ -201,7 +225,7 @@ def convert(source, config):
     return files[0]
 
 
-def run(config, remote, converter=convert):
+def _run_items(config, remote, items, converter=convert, claim=None):
     source_root = remote_path(config['input_folder'])
     beside=config.get('output_layout')=='beside-source'
     output_root = remote_path(config.get('output_folder',source_root.rstrip('/')+'/karaoke'))
@@ -216,7 +240,7 @@ def run(config, remote, converter=convert):
     if not isinstance(extensions,list) or not extensions or set(extensions)-{'.mp3','.mp4'}:
         raise ValueError('extensions must contain .mp3 and/or .mp4')
     count=0
-    for source, fingerprint in discover(remote, source_root, output_root, config.get('recursive', True),extensions):
+    for source, fingerprint in items:
         found+=1
         song_output=str(PurePosixPath(source).parent/'karaoke') if beside else output_root
         identity = hashlib.sha256(source.encode()).hexdigest()[:24]
@@ -247,6 +271,7 @@ def run(config, remote, converter=convert):
                     shutil.rmtree(job)
                 continue
             if config.get('limit',0) and count>=int(config['limit']):break
+            if claim is not None and not claim():continue
             count+=1
             local = job / PurePosixPath(source).name
             print('[DOWNLOAD]', source, flush=True)
@@ -286,6 +311,30 @@ def run(config, remote, converter=convert):
         print('[NO SOURCES] No matching files in '+source_root,flush=True)
         return 2
     return 2 if failed else 0
+
+
+def run(config,remote,converter=convert):
+    workers=config.get('workers',1)
+    if type(workers) is not int or not 1<=workers<=5:raise ValueError('workers must be 1 to 5')
+    limit=config.get('limit',0)
+    if type(limit) is not int or limit<0:raise ValueError('limit must be a non-negative integer')
+    source=remote_path(config['input_folder'])
+    output=remote_path(config.get('output_folder',source.rstrip('/')+'/karaoke'))
+    extensions=config.get('extensions',['.mp4'])
+    if not isinstance(extensions,list) or not extensions or set(extensions)-{'.mp3','.mp4'}:
+        raise ValueError('extensions must contain .mp3 and/or .mp4')
+    items=list(discover(remote,source,output,config.get('recursive',True),extensions))
+    if workers==1 or not items:return _run_items(config,remote,items,converter)
+    count=0;guard=threading.Lock()
+    def claim():
+        nonlocal count
+        with guard:
+            if limit and count>=limit:return False
+            count+=1;return True
+    def one(item):return _run_items({**config,'limit':0},remote,[item],converter,claim)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        results=list(pool.map(one,items))
+    return 2 if any(results) else 0
 
 
 def main():

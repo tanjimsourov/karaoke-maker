@@ -1,9 +1,11 @@
 """Append real stage timings, including failures and cache-return invocations."""
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
 import json
 import os
 import time
+import gc
+import sys
 
 @contextmanager
 def measure(folder, stage):
@@ -27,7 +29,20 @@ def call(folder,stage,fn,*args,**kwargs):
     started=time.perf_counter()
     print(f'[START] {stage}',flush=True)
     try:
-        with measure(folder,stage):result=fn(*args,**kwargs)
+        slots=os.environ.get('KARAOKE_CLOUD_GPU_SLOTS')
+        guarded=bool(slots and os.environ.get('KARAOKE_DEVICE')=='cuda' and
+                     stage in ('separation','audio_screening','transcription_or_import','alignment'))
+        if guarded:
+            from model_queue import resource_slots
+            gate=resource_slots('cloud-gpu-stage',slots=int(slots))
+        else:gate=nullcontext()
+        with measure(folder,stage),gate:
+            try:result=fn(*args,**kwargs)
+            finally:
+                if guarded:
+                    gc.collect()
+                    torch=sys.modules.get('torch')
+                    if torch is not None and torch.cuda.is_initialized():torch.cuda.empty_cache()
     except BaseException as exc:
         print(f'[STOP] {stage}: {exc}',flush=True)
         raise

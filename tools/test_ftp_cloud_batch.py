@@ -41,6 +41,40 @@ class Remote:
 
 
 class BatchTests(unittest.TestCase):
+    def test_random_background_excludes_wrong_aspect_and_small_images(self):
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            Image.new('RGB',(1600,900)).save(root/'good.jpg')
+            Image.new('RGB',(1600,1444)).save(root/'portrait.jpg')
+            Image.new('RGB',(400,225)).save(root/'small.jpg')
+            (root/'broken.jpg').write_bytes(b'broken')
+            for _ in range(5):
+                self.assertEqual(batch.select_background({'background_folder':str(root)}),str(root/'good.jpg'))
+
+    def test_five_song_queue_runs_jobs_together_and_cleans_each(self):
+        import threading
+        class Five(Remote):
+            def __init__(self):
+                super().__init__();self.files={'/music/song%d.mp4'%i:b'source' for i in range(5)}
+            def list(self,folder):
+                if folder=='/music':return [('song%d.mp4'%i,{'type':'file','size':'6','modify':'1'}) for i in range(5)]
+                raise AssertionError(folder)
+        with tempfile.TemporaryDirectory() as temp,patch.object(batch,'ROOT',Path(temp)):
+            barrier=threading.Barrier(5);guard=threading.Lock();active=peak=0
+            def converter(source,config):
+                nonlocal active,peak
+                with guard:active+=1;peak=max(peak,active)
+                barrier.wait(timeout=5)
+                result=source.parent/('done-'+source.stem+'.mp4');result.write_bytes(b'video')
+                with guard:active-=1
+                return result
+            remote=Five()
+            code=batch.run({'input_folder':'/music','output_folder':'/music/karaoke','workers':5},remote,converter)
+            self.assertEqual(code,0);self.assertEqual(peak,5)
+            self.assertEqual(len([n for n in remote.files if '/karaoke/' in n and n.endswith('.mp4')]),5)
+            self.assertFalse(list((Path(temp)/'work/ftp-cloud').glob('*')))
+
     def test_iis_without_mlsd_lists_files_and_directories(self):
         class IIS:
             current='/'

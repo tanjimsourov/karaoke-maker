@@ -13,9 +13,13 @@
   "model": "htdemucs",
   "language": "da",
   "threads": 2,
+  "workers": 5,
+  "gpu_slots": 1,
+  "fps": 30,
   "background": "assets/audio-bg/6.jpeg",
-  "highlight_colour": "#00AEEF",
-  "countdown_style": "circle",
+  "background_folder": "assets/audio-bg",
+  "highlight_colour": "#FFA500",
+  "countdown_style": "arc",
   "countdown_colour": "#BB3794",
   "limit": 0
 }

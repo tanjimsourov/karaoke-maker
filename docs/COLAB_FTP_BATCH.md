@@ -10,10 +10,13 @@ Read-only FTP inspection on 12 November 2026 found eight MP3 files in:
 `/LH MP3 (actual situation in pre-defined)/Denmark Charts 2026`.
 The other checked Danish DB/Mellow MP3 directories were empty at inspection time.
 
-The default config is `config/ftp-mp3-danish.json`. It selects `6.jpeg`, Danish
-language, light `htdemucs`, the existing 10-second introduction/logo/countdown,
-white text with blue moving highlight, 1920x1080 and the existing under-100-MB
-export limit. Edit its background path/colours/folder to select different assets.
+The default config is `config/ftp-mp3-danish.json`. It matches the STOR MAND reference: Danish language, light `htdemucs`, the
+existing 10-second introduction/logo, magenta closing arc, orange moving
+highlight, and 1920x1080 at 30 fps with the existing under-100-MB export limit.
+`background_folder` randomly selects an eligible 16:9 image of at least 1280x720.
+The full image is preserved; source images may be scaled up to the output size.
+Currently only `1.jpeg` qualifies; other aspect ratios are excluded.
+Remove `background_folder` to select one fixed `background` file instead.
 
 Example remote output:
 `/LH MP3 (actual situation in pre-defined)/Denmark Charts 2026/karaoke/Artist - Song - Karaoke - <source-hash>.mp4`
@@ -32,7 +35,10 @@ FTPS with certificate validation is supported when configured on the server.
 ## Running
 
 The notebook installs the existing Python 3.11 environments, checks both CUDA
-stacks, then runs one song at a time. First installation/model download can take
+stacks, then runs a five-song queue. GPU-heavy stages share one GPU slot by default;
+FTP transfers, CPU background work and rendering can overlap. This is not a
+claim of fivefold speed or five simultaneous large models. Change `gpu_slots`
+only after measuring VRAM usage on the intended host. First installation/model download can take
 longer; models are shared by subsequent songs. The current free Colab runtime can
 expire. Rerun in an authorized runtime; completed remote outputs are recognized.
 
@@ -81,7 +87,7 @@ skip receipt, but never deletes a source or completed video.
 
 ## Validation scope
 
-Nine focused batch tests and a real localhost FTP round-trip test cover download,
+Eleven focused batch tests, a GPU-stage queue test and a real localhost FTP round-trip test cover download,
 Unicode file names, IIS fallback, upload verification, publication, resume,
 changed sources and cleanup. The test converter writes fixtures; it does not
 prove model or lyric quality. Production FTP discovery was read-only. No new
