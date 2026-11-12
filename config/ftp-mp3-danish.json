@@ -1,0 +1,21 @@
+{
+  "host": "185.183.33.18",
+  "port": 2157,
+  "tls": false,
+  "user_env": "KARAOKE_FTP_USER",
+  "password_env": "KARAOKE_FTP_PASSWORD",
+  "input_folder": "/LH MP3 (actual situation in pre-defined)/Denmark Charts 2026",
+  "output_layout": "beside-source",
+  "extensions": [".mp3"],
+  "recursive": true,
+  "cleanup_failed": true,
+  "require_gpu": true,
+  "model": "htdemucs",
+  "language": "da",
+  "threads": 2,
+  "background": "assets/audio-bg/6.jpeg",
+  "highlight_colour": "#00AEEF",
+  "countdown_style": "circle",
+  "countdown_colour": "#BB3794",
+  "limit": 0
+}

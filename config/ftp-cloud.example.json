@@ -1,0 +1,14 @@
+{
+  "host": "ftp.example.com",
+  "port": 21,
+  "tls": true,
+  "user_env": "KARAOKE_FTP_USER",
+  "password_env": "KARAOKE_FTP_PASSWORD",
+  "input_folder": "/Danish New",
+  "output_folder": "/Danish New/karaoke",
+  "recursive": true,
+  "require_gpu": true,
+  "model": "htdemucs",
+  "language": "auto",
+  "threads": 2
+}
