@@ -1,4 +1,4 @@
-param([string]$MediaDirectory = 'D:/Application/Website/ftpPrivate/Danish New',
+param([string]$MediaDirectory = 'D:/Application/Website/ftpPrivate/Basic & More Danish/MP4/normalized',
       [string]$MellowDirectory = 'D:/Application/Website/ftpPrivate/Danish Mellow/normalization-mp4/MP4',
       [string]$DbDirectory = 'D:/Application/Website/ftpPrivate/Danish DB Songs/mp4')
 $ErrorActionPreference = 'Stop'
@@ -8,6 +8,7 @@ $settings = [ordered]@{
     KARAOKE_MEDIA_HOST_DIR = '"' + $MediaDirectory.Replace('\','/') + '"'
     KARAOKE_MELLOW_HOST_DIR = '"' + $MellowDirectory.Replace('\','/') + '"'
     KARAOKE_DB_HOST_DIR = '"' + $DbDirectory.Replace('\','/') + '"'
+    KARAOKE_EXTRA_INPUT_DIRS = '[]'
     KARAOKE_DATA_HOST_DIR = './docker-data'
     KARAOKE_DOCKER_CPUS = '8'
     KARAOKE_DOCKER_MEMORY = '12g'

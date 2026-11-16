@@ -1,5 +1,10 @@
 # Three-folder automatic server export
 
+This describes the previous batch. The current tracked configuration scans only
+the normalized Danish folder; see [NORMALIZED_SERVER.md](NORMALIZED_SERVER.md).
+Set `KARAOKE_EXTRA_INPUT_DIRS=["/media-mellow","/media-db"]` to enable the two
+additional mounted inputs again.
+
 Source folders (including subfolders):
 
 - `D:\Application\Website\ftpPrivate\Danish New`

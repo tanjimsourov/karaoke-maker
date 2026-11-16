@@ -18,8 +18,10 @@ class DeploymentTests(unittest.TestCase):
             self.assertFalse(mounts[target]['bind']['create_host_path'])
             self.assertIn(target+'/karaoke',mounts)
             self.assertFalse(mounts[target+'/karaoke'].get('read_only',False))
-        import json
-        self.assertEqual(json.loads(runner['environment']['KARAOKE_EXTRA_INPUT_DIRS']),['/media-mellow','/media-db'])
+        self.assertEqual(runner['environment']['KARAOKE_EXTRA_INPUT_DIRS'],
+                         '${KARAOKE_EXTRA_INPUT_DIRS:-[]}')
+        self.assertEqual(data['services']['karaoke-init']['environment']['KARAOKE_EXTRA_INPUT_DIRS'],
+                         '${KARAOKE_EXTRA_INPUT_DIRS:-[]}')
 
     def test_init_preserves_source_and_creates_only_output(self):
         with tempfile.TemporaryDirectory() as d:
@@ -58,7 +60,9 @@ class DeploymentTests(unittest.TestCase):
         for line in (ROOT/'.env').read_text().splitlines():
             if '=' in line and not line.lstrip().startswith('#'):
                 k,v=line.split('=',1);values[k]=v.strip('"')
-        self.assertEqual(values['KARAOKE_MEDIA_HOST_DIR'],'D:/Application/Website/ftpPrivate/Danish New')
+        self.assertEqual(values['KARAOKE_MEDIA_HOST_DIR'],
+                         'D:/Application/Website/ftpPrivate/Basic & More Danish/MP4/normalized')
+        self.assertEqual(values['KARAOKE_EXTRA_INPUT_DIRS'], '[]')
         self.assertEqual(values['KARAOKE_COUNTDOWN_COLOUR'],'#BB3794')
         self.assertEqual(values['KARAOKE_CLEANUP_AFTER_RUN'],'1')
         self.assertTrue((ROOT/values['KARAOKE_LOGO']).is_file())
