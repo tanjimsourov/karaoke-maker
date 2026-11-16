@@ -17,11 +17,11 @@ import numpy as np
 from PIL import Image, ImageFont
 from common import ROOT, read, save, digest
 
-PROFILES={'white-blue':2,'blue-yellow':0}
+from colour_profiles import PROFILES
 
 def code_hash():
     sha=hashlib.sha256()
-    for name in ('common.py','converter.py','recovery.py'):
+    for name in ('common.py','converter.py','recovery.py','colour_profiles.py'):
         sha.update((ROOT/name).read_bytes())
     return sha.hexdigest()
 

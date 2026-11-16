@@ -12,6 +12,13 @@ from collections import Counter, deque
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 
 ROOT = Path(__file__).resolve().parents[1]
+SOURCE_TYPES=('mp4','mp3','zoom','singking')
+
+
+def source_kind(value=None):
+    value=(value or os.getenv('KARAOKE_SOURCE_TYPE','mp4')).lower()
+    if value not in SOURCE_TYPES:raise ValueError('source type must be mp4, mp3, zoom or singking')
+    return value
 
 def sha(path):
     h=hashlib.sha256()
@@ -25,7 +32,8 @@ def write_json(path, value):
     temp.write_text(json.dumps(value,indent=2,ensure_ascii=False),encoding='utf-8')
     temp.replace(path)
 
-def discover(root, output, settle=30):
+def discover(root, output, settle=30, source_type=None):
+    extension='.mp3' if source_kind(source_type)=='mp3' else '.mp4'
     root,output=root.resolve(),output.resolve()
     for parent, directories, files in os.walk(root,followlinks=False):
         parent=Path(parent)
@@ -33,24 +41,44 @@ def discover(root, output, settle=30):
             and not (parent/d).resolve().is_relative_to(output))
         for name in sorted(files):
             p=parent/name
-            if p.suffix.lower()!='.mp4' or p.is_symlink():continue
+            if p.suffix.lower()!=extension or p.is_symlink():continue
             if p.resolve().is_relative_to(output):continue
             if p.stat().st_size and time.time()-p.stat().st_mtime>=settle:yield p
 
-def make_job(source, language, model, threads):
+def make_job(source, language, model, threads, source_type=None):
+    kind=source_kind(source_type)
     artist, separator, title=source.stem.partition(' - ')
     if not separator:artist,title='Unknown Artist',source.stem
     sidecar=source.with_suffix('.karaoke.json')
     overrides=json.loads(sidecar.read_text(encoding='utf-8')) if sidecar.exists() else {}
     if not isinstance(overrides,dict) or set(overrides)-{'title','artist','language'}:
         raise ValueError('Metadata sidecar only accepts title, artist, language: '+str(sidecar))
-    return {'source':str(source.resolve()),'title':title,'artist':artist,'language':language,
-        'mode':'music','background':'original','profile':'optimized',
+    language=overrides.get('language',language)
+    screen=kind in ('zoom','singking')
+    if screen and language=='auto':raise ValueError('Set a fixed language for Zoom/Sing King screen lyrics')
+    background=os.getenv('KARAOKE_BACKGROUND','auto')
+    if background=='auto':
+        background=os.getenv('KARAOKE_AUDIO_BACKGROUND','assets/audio-bg/6.jpeg') if kind!='mp4' else 'original'
+    if kind=='mp3' and background=='original':raise ValueError('MP3 needs an image/video background')
+    if background!='original':
+        path=Path(background).expanduser()
+        path=path if path.is_absolute() else ROOT/path
+        if not path.is_file():raise ValueError('Missing background: '+str(path))
+        background=str(path.resolve())
+    job={'source':str(source.resolve()),'title':title,'artist':artist,'language':language,
+        'mode':'zoom' if screen else 'music','background':background,'profile':'optimized',
         'separation':{'model':model,'overlap':.25},'audio_quality':{'threads':threads,'alternatives':
             ['htdemucs_ft'] if os.getenv('KARAOKE_SERVER_AUDIO_FALLBACK','0')=='1' and model=='htdemucs' else []},
-        'render':{'canvas':'1920x1080','fps':'source','video_bitrate':2000000,'intro_seconds':10,'intro_countdown':True,
+        'render':{'canvas':'1920x1080','fps':30 if kind=='mp3' else 'source','video_bitrate':2000000,'intro_seconds':10,'intro_countdown':True,
                   'countdown_style':os.getenv('KARAOKE_COUNTDOWN_STYLE','arc'),
                   'countdown_colour':os.getenv('KARAOKE_COUNTDOWN_COLOUR','#BB3794')},**overrides}
+    if screen:
+        from zoom_import.colour_profiles import PROFILES
+        profile=os.getenv('KARAOKE_SCREEN_PROFILE','auto')
+        if profile=='auto':profile='white-magenta' if kind=='singking' else 'white-blue'
+        if profile not in PROFILES:raise ValueError('Unsupported screen profile: '+profile)
+        job['screen_profile']=profile
+    return job
 
 def receipt_matches(receipt, source_sha, recipe_sha):
     if receipt.get('status') not in ('exported','draft_exported','verified_exported') or receipt.get('source_sha256')!=source_sha \
@@ -117,7 +145,7 @@ def run_one(source, root, output, report_dir, args):
     verified=getattr(args,'delivery_mode','automatic')=='verified'
     before=(source.stat().st_size,source.stat().st_mtime_ns)
     source_sha=sha(source)
-    job=make_job(source,args.language,args.model,args.threads)
+    job=make_job(source,args.language,args.model,args.threads,getattr(args,'source_type',None))
     identity=hashlib.sha256(str(source.relative_to(root)).encode()).hexdigest()[:20]
     receipt_path=report_dir/(identity+'.json')
     code=hashlib.sha256()
@@ -284,6 +312,7 @@ def main():
     p.add_argument('--output-dir',type=Path,default=None)
     p.add_argument('--extra-input-dir',type=Path,action='append',default=[])
     p.add_argument('--language',default=os.getenv('KARAOKE_LANGUAGE','auto'))
+    p.add_argument('--source-type',choices=SOURCE_TYPES,default=os.getenv('KARAOKE_SOURCE_TYPE','mp4'))
     p.add_argument('--model',choices=['htdemucs','htdemucs_ft'],default=os.getenv('KARAOKE_SERVER_MODEL','htdemucs'))
     p.add_argument('--delivery-mode',choices=['automatic','verified','samples'],default=os.getenv('KARAOKE_DELIVERY_MODE','automatic'))
     p.add_argument('--threads',type=int,default=int(os.getenv('KARAOKE_SERVER_THREADS','1')))
@@ -297,6 +326,9 @@ def main():
     p.add_argument('--workers',type=int,default=int(os.getenv('KARAOKE_SERVER_WORKERS','3')))
     p.add_argument('--cleanup-song',action=argparse.BooleanOptionalAction,default=True)
     args=p.parse_args()
+    if args.source_type not in SOURCE_TYPES:p.error('Invalid KARAOKE_SOURCE_TYPE')
+    if args.source_type in ('zoom','singking') and args.language=='auto':
+        p.error('Set KARAOKE_LANGUAGE to the screen lyric language, for example en or da')
     root=args.input_dir.resolve()
     output=(args.output_dir or Path(os.getenv('KARAOKE_SERVER_OUTPUT_DIR',str(root/'karaoke')))).resolve()
     if not root.is_dir():p.error('Input directory does not exist: '+str(root))
@@ -313,12 +345,12 @@ def main():
     for directory in roots:
         destination=output if directory==root else directory/'karaoke'
         tasks.extend((source,directory,destination,destination/'.karaoke-status')
-                     for source in discover(directory,destination,args.settle_seconds))
+                     for source in discover(directory,destination,args.settle_seconds,args.source_type))
     if args.limit:tasks=tasks[:args.limit]
     files=[task[0] for task in tasks]
     if args.dry_run:
         print(json.dumps({'inputs':[str(v) for v in roots],'output':str(output),'files':[str(f) for f in files],
-                          'mode':args.delivery_mode,'max_bytes':99999999},indent=2));return 0
+                          'mode':args.delivery_mode,'source_type':args.source_type,'max_bytes':99999999},indent=2));return 0
     output.mkdir(parents=True,exist_ok=True)
     report_dir=output/'.karaoke-status';report_dir.mkdir(parents=True,exist_ok=True)
     from model_queue import model_slot

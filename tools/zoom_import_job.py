@@ -4,13 +4,14 @@ import json
 from pathlib import Path
 import sys
 from project_runtime import ROOT, FFMPEG, LOGO
+from zoom_import.colour_profiles import PROFILES
 
 
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--source', type=Path, required=True)
     p.add_argument('--output', type=Path, required=True)
-    p.add_argument('--profile', choices=['white-blue','blue-yellow'], default='white-blue')
+    p.add_argument('--profile', choices=list(PROFILES), default='white-blue')
     a = p.parse_args(); a.output.mkdir(parents=True, exist_ok=True)
     sys.path.insert(0, str(ROOT/'tools/zoom_import'))
     import converter

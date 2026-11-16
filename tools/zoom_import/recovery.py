@@ -10,6 +10,7 @@ import av
 import cv2
 import numpy as np
 from common import ROOT, save, read
+from colour_profiles import colours
 CORRECTIONS = {}
 SCAN_INTERVAL = 1.0
 
@@ -108,19 +109,6 @@ def tracks(k):
         g['id']=i
     save(WORK/str(k)/'tracks.json',groups)
     print('tracks',k,len(groups))
-
-
-def colours(frame,k):
-    b,g,r=cv2.split(frame.astype(np.float32))
-    blue=(b>r+35)&(b>g+20)&(b>65)
-    if k==0:
-        active=(r>150)&(g>150)&(b<100)&(abs(r-g)<65)
-        pink=(r>120)&(b>75)&(g<r*.7)
-        base=blue|pink
-    else:
-        active=blue
-        base=(np.minimum(np.minimum(r,g),b)>160)&(np.maximum(np.maximum(r,g),b)-np.minimum(np.minimum(r,g),b)<45)
-    return active,base
 
 
 def measurements(k):

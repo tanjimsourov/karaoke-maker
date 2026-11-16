@@ -56,7 +56,8 @@ def normalize(job, base=ROOT):
         raise ValueError('Title/artist must not contain ASS markup or newlines')
     if type(j['transcription_chunk_length']) is not int or not 1<=j['transcription_chunk_length']<=30:
         raise ValueError('transcription_chunk_length must be 1..30')
-    if j.get('screen_profile','white-blue') not in ['white-blue','blue-yellow']:
+    from zoom_import.colour_profiles import PROFILES
+    if j.get('screen_profile','white-blue') not in PROFILES:
         raise ValueError('Unsupported Zoom screen profile')
     if j['mode'] not in ['music','zoom']: raise ValueError('mode must be music or zoom')
     if not re.fullmatch(r'auto|[a-z]{2,3}', j['language']): raise ValueError('Invalid language code')

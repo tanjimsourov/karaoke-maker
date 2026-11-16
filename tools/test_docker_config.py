@@ -9,6 +9,11 @@ from container_init import initialize
 ROOT=Path(__file__).resolve().parents[1]
 
 class DeploymentTests(unittest.TestCase):
+    def test_source_settings_forwarded_from_env(self):
+        env=yaml.safe_load((ROOT/'docker-compose.yml').read_text())['services']['karaoke']['environment']
+        for key in ('KARAOKE_SOURCE_TYPE','KARAOKE_BACKGROUND','KARAOKE_AUDIO_BACKGROUND','KARAOKE_SCREEN_PROFILE'):
+            self.assertTrue(env[key].startswith('${'+key+':-'))
+            self.assertIn(key+'=',(ROOT/'.env').read_text())
     def test_three_source_roots_each_have_separate_writable_output(self):
         data=yaml.safe_load((ROOT/'docker-compose.yml').read_text())
         runner=data['services']['karaoke']
