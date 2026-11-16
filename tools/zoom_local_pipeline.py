@@ -110,9 +110,14 @@ def mapped_segments(segments, anchors):
         for word in segment['words']:
             if 'start' not in word or 'end' not in word:
                 raise ValueError(f'Unaligned word needs manual timing: {word}')
-            words.append({**word, 'start': map_time(word['start'], anchors),
-                          'end': map_time(word['end'], anchors)})
-        result.append({**segment, 'words': words})
+            mapped={**word,'start':map_time(word['start'],anchors),'end':map_time(word['end'],anchors)}
+            if 'sweep' in word:
+                mapped['sweep']=[[map_time(at,anchors),fraction] for at,fraction in word['sweep']]
+            words.append(mapped)
+        row={**segment,'words':words}
+        if words and 'start' in segment:row['start']=words[0]['start']
+        if words and 'end' in segment:row['end']=words[-1]['end']
+        result.append(row)
     return result
 
 
@@ -362,6 +367,12 @@ def run_renderer(cfg, work, destination, output_name, ass_only=False):
     options, render_args = render_options(cfg)
     if ass_only:
         render_args.append('--ass-only')
+    if cfg.get('source_sweeps'):
+        segments=mapped_segments(read(work/'aligned.json'),read(work/'sync.json')['anchors'])
+        from screen_sweep import validate_cues
+        validate_cues(segments,max(w['end'] for c in segments for w in c['words']),require_sweep=True)
+        save(work/'source-sweeps.json',segments)
+        render_args += ['--source-sweep-file',str(work/'source-sweeps.json')]
     if cfg.get('branding_plan'):
         plan=cfg['branding_plan']
         if digest(plan['file'])!=plan['sha256']:raise ValueError('Branding plan changed')

@@ -170,7 +170,10 @@ def context(job, folder, strict_quality=True):
         cfg['layers'] = {'file':str(layer_file), 'sha256':digest(layer_file),
             'media':{x['file']:digest(layers.resolve(x['file'],ROOT)) for x in data.get('media',[])+data.get('audio',[])},
             'changes_audio':bool(data.get('audio') or data.get('backing',{}).get('mute') or data.get('backing',{}).get('volume_db'))}
-    if strict_quality and (folder/'audio-quality/selection.json').exists():
+    if job['mode']=='zoom':
+        cfg.update(source_backing=True,source_sweeps=True,zoom_video=job['source'],
+                   align_audio=job['source'],guide_vocal=None,render_defaults={})
+    if job['mode']!='zoom' and strict_quality and (folder/'audio-quality/selection.json').exists():
         report, _ = separation_guard.validate(job['source'], folder/'audio-quality')
         cfg['zoom_video'] = report['selected']['path']
         cfg['audio_quality_sha256'] = digest(folder/'audio-quality/selection.json')
@@ -235,8 +238,9 @@ def transcripts(job, folder, cfg):
             save(folder/'transcript.json', [{k:s[k] for k in ['start','end','text']} for s in segments])
         if not (folder/'aligned.json').exists(): save(folder/'aligned.json', segments)
         save(folder/'inputs.json', {k:digest(cfg[k]) for k in ['vocal_reference','zoom_video']})
-        from audio_quality import decode, RATE
-        duration = len(decode(job['source']))/RATE
+        import av
+        with av.open(job['source']) as media:
+            duration=media.duration/av.time_base
         save(folder/'sync.json', {'anchors':[[0,0],[duration,duration]]})
         if cfg['language']=='auto':
             raise ReviewRequired('Zoom OCR does not detect spoken language. Set language in the job file.')
@@ -294,16 +298,22 @@ def execute(stage, job, folder, args):
             background_worker = workers.enter_context(BackgroundJob(
                 source, folder/'parallel-background', job.get('profile')=='optimized'))
         cfg = context(job, folder, strict_quality=stage not in ['run','audio-qc','separate'])
-        if stage in ['run','separate']:
+        screen_source=job.get('mode','music')=='zoom'
+        if screen_source:
+            from screen_source import audit as source_audit
+            source_audit(cfg,folder)
+            print('[SOURCE AUDIO] Reusing original karaoke backing; no separation or vocal ASR.',flush=True)
+            if stage in ['separate','audio-qc']:return
+        if not screen_source and stage in ['run','separate']:
             call(folder,'separation',local.separate,cfg,folder)
             local.verify_stems(cfg, folder)
             if stage == 'separate': return
-        if stage in ['run','audio-qc']:
+        if not screen_source and stage in ['run','audio-qc']:
             local.verify_stems(cfg, folder); call(folder,'audio_screening',screen,job,folder)
             cfg = context(job, folder)
             if stage == 'audio-qc': return
         if stage in ['run','transcribe']:
-            separation_guard.validate(job['source'], folder/'audio-quality')
+            if not screen_source:separation_guard.validate(job['source'], folder/'audio-quality')
             call(folder,'transcription_or_import',transcripts,job,folder,cfg)
             cfg = context(job, folder)
             if stage == 'transcribe': return
@@ -344,7 +354,10 @@ def execute(stage, job, folder, args):
                     raise ReviewRequired('Edited lyrics differ from imported timing. Correct aligned.json or use music mode to realign.')
                 save(folder/'alignment-inputs.json', {'transcript':digest(folder/'transcript.json'),
                     'vocal_reference':digest(cfg['vocal_reference'])})
-            local.check_timing(cfg, folder)
+            if screen_source:
+                from screen_source import timing
+                call(folder,'screen_timing_validation',timing,cfg,folder)
+            else:local.check_timing(cfg, folder)
             if stage == 'align': return
         if stage=='quick-preview':
             from quick_preview import create
@@ -374,7 +387,7 @@ def execute(stage, job, folder, args):
             missing = sorted({c for text in texts for c in text if not c.isspace() and ord(c) not in glyphs})
             if missing: raise ReviewRequired('Set KARAOKE_FONT to a font containing these characters: '+''.join(missing))
             local.require_translation_review(cfg, folder)
-            local.audit(cfg, folder)
+            if not screen_source:local.audit(cfg, folder)
             if (folder/'preview-validation.json').exists():
                 try: verify_preview(cfg, folder, branding=False)
                 except ReviewRequired: call(folder,'render',render,cfg,folder,preview=True)
@@ -384,7 +397,7 @@ def execute(stage, job, folder, args):
                 from delivery_verification import build
                 call(folder,'delivery_verification',build,cfg,folder)
             print('RENDER COMPLETE:' if os.getenv('KARAOKE_SERVER_CONCURRENT')=='1' else 'PREVIEW:', read(folder/'preview-validation.json')['output'], flush=True)
-            print('Audio comparisons:', folder/'audio-quality/review/index.html', flush=True)
+            if not screen_source:print('Audio comparisons:', folder/'audio-quality/review/index.html', flush=True)
             if getattr(args, 'draft_export', False):
                 source = Path(read(folder/'preview-validation.json')['output'])
                 from output_size import MAX_BYTES
@@ -403,19 +416,23 @@ def execute(stage, job, folder, args):
         if stage == 'approve':
             if not all([args.listened,args.checked_lyrics,args.reviewed_audio,args.reviewed_timing]):
                 raise ReviewRequired('Approval requires --listened --checked-lyrics --reviewed-audio --reviewed-timing')
-            separation_guard.validate(job['source'], folder/'audio-quality')
+            if not screen_source:separation_guard.validate(job['source'], folder/'audio-quality')
             verify_preview(cfg, folder); local.require_translation_review(cfg, folder)
             from delivery_verification import approve as approve_delivery
             if not getattr(args,'verification_decisions',None):
                 raise ReviewRequired('Run verify and supply --verification-decisions after resolving its issues')
             approve_delivery(cfg,folder,args.verification_decisions)
-            local.approve(cfg, folder, True)
+            if screen_source:
+                source_audit(cfg,folder)
+                save(folder/'approval.json',{'fingerprint':fingerprint(cfg,folder),'review':'user_confirmed',
+                    'audio_audit_sha256':digest(folder/'audio-audit.json')})
+            else:local.approve(cfg, folder, True)
             save(folder/'full-review.json', {'fingerprint':fingerprint(cfg,folder),
                 'reviewer':args.reviewer, 'listened':True, 'checked_lyrics':True,
                 'reviewed_audio_flags':True, 'reviewed_timing':True})
             return
         if stage == 'render':
-            separation_guard.validate(job['source'], folder/'audio-quality')
+            if not screen_source:separation_guard.validate(job['source'], folder/'audio-quality')
             from delivery_verification import require_approved
             require_approved(cfg,folder)
             if not (folder/'full-review.json').exists() or read(folder/'full-review.json')['fingerprint'] != fingerprint(cfg,folder):

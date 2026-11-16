@@ -91,6 +91,11 @@ def inputs(cfg, folder):
              'preview_validation':folder/'preview-validation.json','video':preview['output'],
              'reference':folder/'verification-reference.json',
              'verifier':Path(__file__), 'reference_code':Path(__file__).with_name('transcribe_source_reference.py')}
+    if cfg.get('source_backing'):
+        for key in ('audio_selection','reference','reference_code'):files.pop(key)
+        files['source_audio_audit']=folder/'audio-audit.json'
+        files['screen_import']=folder/'zoom-import/import.json'
+        files['sweep_code']=Path(__file__).with_name('screen_sweep.py')
     return {key:sha(path) for key,path in files.items()}
 
 
@@ -99,6 +104,18 @@ def build(cfg, folder):
     from zoom_local_pipeline import audio
     import separation_guard
     folder=Path(folder)
+    if cfg.get('source_backing'):
+        from screen_source import audit,timing
+        import av
+        audit(cfg,folder);timing(cfg,folder)
+        with av.open(cfg['zoom_video']) as media:duration=media.duration/av.time_base
+        source_rows=read(folder/'zoom-import/aligned.json')
+        issues=compare(read(folder/'transcript.json'),read(folder/'aligned.json'),
+                       {'segments':source_rows},duration,{})
+        return finish_report(cfg,folder,issues,[
+            'Screen-to-output consistency check; OCR spelling/completeness still requires source comparison.',
+            'Original source backing retained; any vocals already in it remain.',
+            'Review the complete rendered video, not only sampled frames.'])
     ref=folder/'verification-reference.json'
     ref_binding=folder/'verification-reference-binding.json'
     wanted={'source':sha(cfg['vocal_reference']), 'language':cfg['language'],
@@ -121,10 +138,15 @@ def build(cfg, folder):
     _,quality=separation_guard.validate(cfg['vocal_reference'],folder/'audio-quality')
     issues=compare(read(folder/'transcript.json'),read(folder/'aligned.json'),reference,
                    len(audio(cfg['zoom_video']))/16000,quality)
-    report={'schema':1,'status':'needs_review','bindings':inputs(cfg,folder),'issues':issues,
-            'limitations':['ASR passes may agree on incorrect words.',
-                'No clean reference instrumental: instrument preservation requires listening.',
-                'Review the complete rendered video, not only sampled frames.']}
+    return finish_report(cfg,folder,issues,[
+        'ASR passes may agree on incorrect words.',
+        'No clean reference instrumental: instrument preservation requires listening.',
+        'Review the complete rendered video, not only sampled frames.'])
+
+
+def finish_report(cfg,folder,issues,limitations):
+    report={'schema':1,'status':'needs_review','bindings':inputs(cfg,folder),
+            'issues':issues,'limitations':limitations}
     write(folder/'delivery-verification.json',report)
     template=folder/'delivery-decisions.template.json'
     write(template,{'report_sha256':sha(folder/'delivery-verification.json'),'reviewer':'',

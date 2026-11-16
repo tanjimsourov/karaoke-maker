@@ -153,7 +153,9 @@ def run_one(source, root, output, report_dir, args):
     from project_runtime import LOGO
     recipe_sha=hashlib.sha256((json.dumps(job,sort_keys=True)+str(verified)+source_sha+code.hexdigest()+sha(LOGO)).encode()).hexdigest()
     old=json.loads(receipt_path.read_text()) if receipt_path.exists() else {}
-    if not getattr(args,'reprocess_completed',False) and completed_output_matches(old,source_sha,output,verified):
+    screen_contract='measured-source-v1' if job['mode']=='zoom' else None
+    compatible=screen_contract is None or old.get('screen_pipeline')==screen_contract
+    if compatible and not getattr(args,'reprocess_completed',False) and completed_output_matches(old,source_sha,output,verified):
         print('[SKIP COMPLETED]',source,'->',old['output'],flush=True)
         return 'skipped'
     if receipt_matches(old,source_sha,recipe_sha) and (not verified or old.get('status')=='verified_exported'):
@@ -170,6 +172,7 @@ def run_one(source, root, output, report_dir, args):
         return 'skipped'
     record={'source':str(source),'source_sha256':source_sha,'recipe_sha256':recipe_sha,
             'output':str(destination),'status':'running','started':time.time()}
+    if screen_contract:record['screen_pipeline']=screen_contract
     write_json(receipt_path,record)
     runtime=ROOT/'work/server-jobs'/(hashlib.sha256(str(root.resolve()).encode()).hexdigest()[:8]+'-'+identity)
     try:

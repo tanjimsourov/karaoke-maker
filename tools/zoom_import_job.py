@@ -22,7 +22,7 @@ def main():
     folder, state = converter.job_state(cfg, job)
     converter.extract(cfg, job, folder, state)
     cues = converter.read(folder/'cues.json')
-    converter.validate_cues(cues, state['duration'])
+    converter.validate_cues(cues, state['duration'],require_sweep=True)
     # Keep measured sweep samples in aligned.json for review; OCR is never auto-approved.
     converter.save(a.output/'aligned.json', [dict(c, words=c['words']) for c in cues])
     converter.save(a.output/'import.json', {'source_sha256': converter.digest(a.source),

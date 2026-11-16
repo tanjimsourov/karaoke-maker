@@ -15,8 +15,8 @@ One source type applies to the entire run; select a folder containing that type.
 |---|---|---|---|
 | Normal music video | mp4 | auto or language code | Vocal separation, transcription, alignment, original video background |
 | Audio song | mp3 | auto or language code | Vocal separation, transcription, alignment, selected background |
-| Zoom karaoke MP4 | zoom | fixed code, e.g. en | Existing on-screen lyrics and colour timing extraction |
-| Sing King karaoke MP4 | singking | fixed code, e.g. en | Existing on-screen lyrics and colour timing extraction |
+| Zoom karaoke MP4 | zoom | fixed code, e.g. en | Original backing + measured on-screen lyric sweeps |
+| Sing King karaoke MP4 | singking | fixed code, e.g. en | Original backing + measured on-screen lyric sweeps |
 
 Example MP3 settings:
 
@@ -38,12 +38,23 @@ Screen profile names describe original base text then highlight colour:
 `white-blue`, `blue-yellow`, `white-magenta`, `magenta-white`.
 `auto` selects white-blue for Zoom and white-magenta for Sing King. This is a
 preset, not automatic colour detection. Select the matching source profile.
-Different layouts, colours or unreadable lyrics can fail extraction; a complete
-Sing King song conversion has not been validated as part of this routing change.
+Different layouts, colours or unreadable lyrics can fail extraction. Missing measured
+sweeps are rejected instead of silently using a linear word-duration animation.
+The sweep geometry is shared with the existing Zoom converter. Runtime skips
+Demucs, vocal detection, Whisper and WhisperX for Zoom/Sing King, and does not
+apply the normal-song loudness/fade defaults. Any vocals in the source remain.
+Audio and measured sweep samples receive the same added-intro offset.
+
+Regression checks include a real 1080p render with a non-linear source hold,
+source-audio correlation, and both complete automatic route paths. Full-length
+Sing King footage and a server Docker execution remain untested locally.
 
 Existing logo/countdown/rendering, the under-100-MB publication check, per-song
 work cleanup, stored models and completion receipts remain in place. Matching
-completed exports are skipped even after settings change. To intentionally redo
+completed exports are skipped even after settings change. Zoom/Sing King exports
+from before the source-sweep/audio fix are regenerated once with new filenames;
+old published files are preserved. Corrected exports carry a screen-pipeline
+version in the completion receipt and are skipped on subsequent runs. To intentionally redo
 completed songs, use the batch CLI's `--reprocess-completed` option.
 
 Legacy Mellow/DB mount settings remain for compatibility; keep their paths valid.

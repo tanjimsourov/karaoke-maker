@@ -32,6 +32,7 @@ parser.add_argument("--background-file", type=Path)
 parser.add_argument('--branding-plan', type=Path)
 parser.add_argument("--output-name")
 parser.add_argument("--output-dir", type=Path)
+parser.add_argument("--source-sweep-file", type=Path, help="Measured screen sweep samples; no linear word animation")
 parser.add_argument("--source-ass", type=Path, help="Reviewed local word-timed ASS")
 parser.add_argument('--ass-only', action='store_true', help='Write the same styled timed ASS without encoding a background video')
 parser.add_argument("--audio-file", type=Path, help="Existing backing audio; no separation")
@@ -75,7 +76,7 @@ try:
     countdown_settings=intro_countdown.settings(args.countdown_style,args.countdown_colour)
 except ValueError as exc:parser.error(str(exc))
 for path_option in ('background_folder','background_file','output_dir','source_ass','audio_file',
-                    'guide_vocal_file','translation_file','line_styles','layers'):
+                    'guide_vocal_file','translation_file','line_styles','layers','source_sweep_file'):
     value = getattr(args, path_option)
     if value is not None: setattr(args, path_option, value.resolve())
 if args.output_name and Path(args.output_name).name != args.output_name:
@@ -250,6 +251,20 @@ for row in raw.splitlines():
         style = {**TEMPLATE_STYLE, **(line_styles[len(cues)] or {})} if len(cues) < len(line_styles) else dict(TEMPLATE_STYLE)
         cues.append((start, end, karaoke, plain, fields[4].strip(), style))
 
+source_sweeps = None
+if args.source_sweep_file:
+    from screen_sweep import validate_cues, tokens
+    source_sweeps=json.loads(args.source_sweep_file.read_text(encoding='utf-8-sig'))
+    with av.open(str(audio)) as media:
+        sweep_duration=media.duration/av.time_base
+    validate_cues(source_sweeps,sweep_duration,require_sweep=True)
+    if len(source_sweeps)!=len(cues) or any(tokens(c['text'])!=tokens(line[3])
+            or abs(c['start']+INTRO_DELAY-line[0])>.02 or abs(c['end']+INTRO_DELAY-line[1])>.02
+            for c,line in zip(source_sweeps,cues)):
+        raise ValueError('Source sweep samples do not match the current lyrics/timings')
+    if args.translation_file and args.translation_mode=='only':
+        raise ValueError('Measured source sweep cannot be applied to different translated words')
+
 translation_lines = []
 if args.translation_file:
     translation_lines = [
@@ -294,7 +309,21 @@ if args.intro_countdown:
 font = ImageFont.truetype(str(font_file()), max(1, LYRIC_SIZE))
 max_width = TEMPLATE.get('max_text_width', 1640) * SX
 rows = []
-for start, end, karaoke, plain, part, style in cues:
+sweep_rows = []
+for cue_index,(start, end, karaoke, plain, part, style) in enumerate(cues):
+    if source_sweeps is not None:
+        from lyric_wrap import balanced_groups
+        measured=source_sweeps[cue_index]['words']
+        layout_font=ImageFont.truetype(str(font_file()),max(1,px(style.get('size',TEMPLATE['font_size'])*FS)))
+        ascent,descent=layout_font.getmetrics()
+        layout_font=layout_font.font_variant(size=max(1,round(layout_font.size**2/(ascent+descent))))
+        groups=balanced_groups([(i,w['word'].strip()+' ') for i,w in enumerate(measured)],layout_font.getlength,max_width)
+        for group in groups:
+            words=[measured[i] for i,_ in group]
+            plain=' '.join(w['word'].strip() for w in words)
+            rows.append((words[0]['start']+INTRO_DELAY,words[-1]['end']+INTRO_DELAY,'',plain,part,style))
+            sweep_rows.append((words,layout_font))
+        continue
     words = re.findall(r'\{\\kf(\d+)\}([^{}]*)', karaoke)
     if not words:
         words = [(str(round((end-start)*100)), plain)]
@@ -311,6 +340,7 @@ for start, end, karaoke, plain, part, style in cues:
         text = ''.join(f'{{\\kf{t}}}{w}' for t,w in group)
         group_end=end if index==len(groups)-1 else start+elapsed
         rows.append((group_start,group_end,text,strip_tags(text),part,style))
+        sweep_rows.append(None)
         group_start=group_end
 cues = rows
 def line_style_tags(style):
@@ -385,6 +415,21 @@ for page_start_index in range(0, len(cues), LINES_PER_PAGE):
         if part.upper() in PART_COLOURS:
             sweep_pos = sweep_pos[:-1] + f"\\1c&H{PART_COLOURS[part.upper()][4:]}&}}"
         base_name, sweep_name = ('PageBaseBox', 'PageSweepBox') if style.get('box_colour') else ('PageBase', 'PageSweep')
+        measured_row=sweep_rows[page_start_index+position]
+        if measured_row is not None:
+            # Reuse the working Zoom converter's glyph-area -> clip calculation.
+            from screen_sweep import sweep_intervals
+            words,layout_font=measured_row
+            left=x-layout_font.getlength(plain)/2
+            events.append(f"Dialogue: 0,{ass_time(page_start)},{ass_time(page_end)},{base_name},,0,0,0,,{pos}{plain}")
+            for at,until,front in sweep_intervals(words,layout_font,INTRO_DELAY):
+                at=max(at,page_start);until=min(until,page_end)
+                if front>0 and until>at:
+                    clip=f"\\clip({math.floor(left)-6},{max(0,y-size)},{round(left+front)},{min(H,y+size)})"
+                    events.append(f"Dialogue: 1,{ass_time(at)},{ass_time(until)},{sweep_name},,0,0,0,,{sweep_pos[:-1]}{clip}}}{plain}")
+            if end<page_end:
+                events.append(f"Dialogue: 1,{ass_time(max(end,page_start))},{ass_time(page_end)},{sweep_name},,0,0,0,,{sweep_pos}{plain}")
+            continue
         # Adjacent, non-overlapping events keep identical text geometry.
         # Only the active interval uses orange; past/future rows are white.
         active_start = max(start, page_start)
